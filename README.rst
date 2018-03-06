@@ -37,6 +37,8 @@ Features
 - Includes a tool to easyly form a big test Thread network with other attached
   KiNOS devices.
 
+  .. image:: images/KiBRA-web.png
+
 Future improvements
 ===================
 

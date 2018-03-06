@@ -14,7 +14,7 @@ from setuptools import setup
 
 # Get the long description from the README file
 HERE = path.abspath(path.dirname(__file__))
-with copen(path.join(HERE, 'README.txt'), encoding='utf-8') as _file:
+with copen(path.join(HERE, 'README.rst'), encoding='utf-8') as _file:
     LONG_DESC = _file.read()
 
 setup(
