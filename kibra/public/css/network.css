@@ -1,0 +1,122 @@
+.holder {
+/*   stroke: blue;*/ 
+	fill: white;
+}
+
+.link {
+  fill: none;
+  opacity: 0.3;
+  stroke: grey;
+  stroke-width: 1.5px;
+}
+
+.link.good {
+  stroke: green;
+}
+
+#good {
+  fill: green;
+}
+
+.link.bad {
+  stroke: red;
+/*  stroke-dasharray: 0, 2 1;*/
+}
+
+#bad {
+  fill: red;
+}
+
+.link.child {
+  stroke: blue;
+}
+
+.link.online {
+  /*stroke: green;*/
+  stroke: black;
+  stroke-width: 3px;
+}
+
+.link.offline {
+  /*stroke: red;*/
+  stroke: black;
+  stroke-width: 3px;
+  stroke-dasharray: 0, 2 1;
+}
+
+.nodebase {
+  fill: white;
+  cursor: move;
+}
+
+.nodebase.child {
+  fill: black;
+}
+
+.node {
+  pointer-events: none;
+}
+
+.node.child {
+  fill: white;
+}
+
+.node.router {
+  fill: #ff6536;
+}
+
+.node.borderRouter {
+  fill: #5c5b54;
+}
+
+.node.leader {
+  fill: #95a9bd;
+}
+
+.br {
+  fill: black;
+  stroke: black;
+}
+
+.cloud {
+  cursor: move;
+  fill: white;
+  stroke: #95a9bd;
+  stroke-width: 3px;
+}
+
+.label {
+  text-anchor: middle;
+  font: 14px sans-serif;
+  cursor: help;
+  stroke: #0057b8;
+}
+
+div.tooltip {
+  position: absolute;
+  padding: 2px;
+  font: 14px sans-serif;
+  background: lightsteelblue;
+  border: 0px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.legend {
+  font: 20px sans-serif;
+  stroke: #0057b8;
+}
+
+/*
+td.update { 
+  color: blue;
+}
+
+td.enter {
+  color: green;
+}
+
+td.exit, tr.exit td {
+  color: red;
+}
+*/

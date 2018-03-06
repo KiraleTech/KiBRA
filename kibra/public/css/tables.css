@@ -1,0 +1,292 @@
+.datagrid table {
+    border-collapse: collapse;
+    text-align: center;
+    width: 100%;
+	height: 100%;
+}
+
+.datagrid  #test {
+	width: 50%;
+}
+
+.datagrid {
+    font: normal 12px/150% Arial, Helvetica, sans-serif;
+    background: #fff;
+    overflow: hidden;
+    border: 1px solid #006699;
+    -webkit-border-radius: 3px;
+    -moz-border-radius: 3px;
+    border-radius: 3px;
+	margin-bottom: 25px;
+}
+
+
+.datagrid table td,
+.datagrid table th {
+    padding: 3px 10px;
+	text-align: center;
+}
+.datagrid table thead th {
+    background: #0057b8;
+    background-color: #0057b8;
+    color: #E1EEF4;
+    font-size: 12px;
+    font-weight: bold;
+    border-left: 0px solid #0070A8;
+}
+.datagrid table thead th:first-child {
+    border: none;
+}
+.datagrid table tbody td {
+    color: #0057b8;
+    border-left: 1px solid #E1EEF4;
+    font-size: 12px;
+    font-weight: normal;
+	text-align: center;
+}
+.datagrid table tbody .alt td {
+    background: #E1EEF4;
+    color: #00496B;
+}
+.datagrid table tbody td:first-child {
+    border-left: none;
+}
+
+.datagrid table tbody tr:nth-child(even) {
+	background: #E1EEF4;
+    color: #00496B;
+}
+
+.datagrid table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* #small.datagrid{
+	max-width: 80%;
+	margin: 0 auto;
+	display: inline-block;
+} */
+
+
+.dashboard {
+	margin: 2% 0% 2% 0%;
+	width: 100%;
+	/*display: inline-block;*/
+	/*display: table;*/
+	/* width: 100%;*/
+}
+
+.centerdiv{
+	margin: auto;
+	width: 100%;
+	/*display: block;*/
+	/*display: table;*/
+	background: #f2f2f2;
+	/*max-width: 95%;*/
+}
+
+.divtable{
+	width: 33%;
+	float: left;
+}
+
+.holderdiv{
+	width: 90%;
+	height: 100%
+}
+
+.holderdiv .graph svg{
+	width: 100%;
+	height: 100%;
+	margin-left: 12%;
+}
+
+.holderdiv input{
+	width: 100%;
+}
+
+.holderdivwrapper{
+	margin: 0% 0% 3% 0%;
+	width: 100%;
+}
+
+.holderdivwrapper div{
+	margin: auto;
+	width: 50%;
+}
+
+.holderinput{
+	margin: 0% 5% 0% 0%;
+}
+
+.holderinput input{
+	float: left;
+}
+
+
+table.noBorder{
+	border-style: none;
+}
+
+
+.wrapperRules {
+	/* margin-left: 10%;
+	margin-right: 10%;
+	margin-bottom: auto;
+	margin-top: auto; */
+	margin: auto;
+	width: 80%;
+	height: 100%;
+	/* height: -o-calc(100% - 135px); 
+	height: -webkit-calc(100% - 135px); 
+	height: -moz-calc(100% - 135px);  */
+}
+
+.wapperRules div{
+	margin-left: 10%;
+	margin-right: 10%;
+}
+.centerdiv label{
+	display: block;
+	text-align: center;
+}
+/* .wrapperRules label {
+    margin-left: 10%;
+} */
+
+.selectclass select{
+	text-align: center;
+}
+
+
+.wrapper{
+	margin: auto;
+	width: 100%;
+	height: 90%;
+/* 	padding-left: 1.5%;
+	padding-right: 1.5%; */
+	height: -o-calc(100% - 135px); 
+	height: -webkit-calc(100% - 135px); 
+	height: -moz-calc(100% - 135px); 
+}
+
+.wrapper .wrappeddiv{
+	/* display: inline-block; */
+	width: 40%;
+	float: left;
+	height: 100%; 
+}
+.wrapper .allheight{
+	height: 100%;
+	width: 60%;
+	float: left;
+}
+
+#graph{
+	display: block;
+	margin: auto;
+	width: 100%;
+	position:relative;
+}
+
+.button{
+	position:absolute;
+	left: 1.7%;
+	top: 84.5%;
+	width: 102px;
+}
+
+
+.buttonGraphBIG{
+	position:absolute;
+	left: 11.1%;
+	top: 84.5%;
+	width: 102px;
+}
+
+.tableWrapOverflow{
+	overflow: auto;
+	width: 100%;
+	/* height: 100%; */
+	height: -o-calc(100% - 135px); /* opera */
+	height: -webkit-calc(100% - 135px); /* google, safari */
+	height: -moz-calc(100% - 135px); /* firefox */
+}
+
+.tables{
+	display: block;
+	margin: auto;
+	width: 80%;
+	overflow: hidden;
+}
+
+.tables table{
+	height: 33%;
+}
+
+
+.tableswithlabel{
+	width: 100%;
+	margin: auto;
+}
+
+.reducedWidth{
+	width: 80%;
+}
+/**
+ * Footer Styles
+ */
+
+.footer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: #efefef;
+  text-align: center;
+}
+
+.global{
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	margin: 0;
+}
+
+.globalnoOverflow{
+	overflow: auto;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+}
+
+.customContainerFluid{
+    margin-left: 1%;
+	margin-bottom: 5px;
+	margin-top: 5px;
+}
+
+.customNavHeader{
+	margin-left: 20px;
+}
+
+
+.navbar-default div{
+	font-size: 17px;
+}
+
+.navbar-collapse ul{
+	margin-left: 10px;
+}
+/* #tables *{
+	display: block;
+} */
+
+/* #tables div{
+	display: block;
+} */
+
+
+
+
+
