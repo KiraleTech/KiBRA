@@ -180,8 +180,8 @@ the same network as the Border Router.
 
 If KiBRA was started correctly, the Commissioning App should be able to
 discover the advertised network and ask for the Commissioner Credential in
-order to access to its management. Once entered (by default: "KIRALE")it should
-successfully join to the network and allow to scan a QR code.
+order to access to its management. Once entered (by default: "KIRALE") it
+should successfully join to the network and allow to scan a QR code.
 
     Tip: Use ``tcpdump`` for traffic overview on the interior interface.
 
@@ -220,7 +220,81 @@ This allows a fast network formation for different testing purposes.
 The ``--clear`` option can be used to clear the configuration of all attached
 KTDG102 USB Dongles, and therefore, remove them from the network.
 
-Virtual Machine Kirale Border Router
+Kirale Border Router Virtual Machine
 ====================================
 
-TBD
+As a fast way for evaluating the KiNOS devices Thread Border Router
+capabilities, a `Virtual Appliance` is provided ready for usage in a virtual
+machine environment (`VirtualBox <https://www.virtualbox.org/>`_, `VMWare 
+<https://www.vmware.com/>`_...).
+
+⬇⬇⬇ `Kirale-Thread-Border-Router.ova
+<https://drive.google.com/open?id=1ularXx5a-T1iw3Xzc1AkosugqHFkgt5u>`_ ⬇⬇⬇
+(402 MB)
+
+The image is based on Debian Buster and has the required dependancies installed.
+
+Usage in VirtualBox 5.2.8
+-------------------------
+
+From the VirtualBox main screen go to ``File --> Import appliance...``, find the
+downloaded file and import it. A new virtual machine will appear in the list and
+can be started. Make sure a netkork adapter is enabled as `Bridged adapter`
+under ``Network`` settings, and `USB 2.0` is enabled.
+
+The default credentials are:
+- User: ``root``
+- Password: ``kirale``
+
+You may want to configure keyboard and time zone:
+::
+
+ dpkg-reconfigure tzdata
+ dpkg-reconfigure keyboard-configuration
+ setupcon
+
+The SSH server is enabled by default, in case it is necessary to access the 
+virtual machine from a remote location. Just take note of the DHCP obtained
+address(es) via the virtual netkork adapter:
+::
+
+ ip addr
+
+The Python virtual environment is located in ``/root/py36env/`` and contains
+clones from the KiTools and KiBRA repositories. You may want to update them for
+last changes:
+::
+
+ cd /root/py36env/KiTools
+ git pull origin master
+ python setup.py install 
+ cd /root/py36env/KiBRA
+ git pull origin master
+ python setup.py install 
+ cd /root/py36env
+ source bin/activate
+
+At this point, plug in a KTWM102 USB Dongle to a USB port from the host machine
+and capture it for the virtual machine: right click on the bottom USB icon and
+click on ``Kirale Technologies KTWM102 Module``. Check that the guest machine
+adquired it:
+::
+
+ dmesg | tail -n 12
+ [   91.616127] usb 2-2: new full-speed USB device number 3 using ohci-pci
+ [   91.966133] usb 2-2: New USB device found, idVendor=2def, idProduct=0102
+ [   91.966142] usb 2-2: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+ [   91.966147] usb 2-2: Product: KTWM102 Module
+ [   91.966153] usb 2-2: Manufacturer: Kirale Technologies
+ [   91.966158] usb 2-2: SerialNumber: 8404D2000000045C
+ [   92.059395] cdc_ether 2-2:1.3 eth0: register 'cdc_ether' at usb-0000:00:06.0-2, CDC Ethernet Device, 84:04:d2:00:04:5c
+ [   92.059641] cdc_acm 2-2:1.1: ttyACM0: USB ACM device
+ [   92.060069] usbcore: registered new interface driver cdc_ether
+ [   92.066109] usbcore: registered new interface driver cdc_acm
+ [   92.066111] cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+ [   92.077118] cdc_ether 2-2:1.3 enx8404d200045c: renamed from eth0
+
+Now it is possible to run the KiBRA application:
+::
+
+ python -m kibra
