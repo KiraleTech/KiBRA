@@ -230,7 +230,6 @@ machine environment (`VirtualBox <https://www.virtualbox.org/>`_, `VMWare
 
 ⬇⬇⬇ `Kirale-Thread-Border-Router.ova
 <https://drive.google.com/open?id=1ularXx5a-T1iw3Xzc1AkosugqHFkgt5u>`_ ⬇⬇⬇
-(402 MB)
 
 The image is based on Debian Buster and has the required dependancies installed.
 
