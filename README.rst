@@ -4,7 +4,7 @@ Kirale Border Router Administration (KiBRA)
 
 This project intends to be a reference implementation of a `Thread
 <https://www.threadgroup.org/>`_ Border Router for a `GNU/Linux Debian
-<https://www.debian.org/>`_ host and a `KiNOS <https://kinos.io/>`_ USB enabled
+<https://www.debian.org/>`_ host and a `KiNOS <http://kinos.io/>`_ USB enabled
 device.
 
 It is written in Python 3.6, and provides a fast way for third-party developers
@@ -238,10 +238,11 @@ Usage in VirtualBox 5.2.8
 
 From the VirtualBox main screen go to ``File --> Import appliance...``, find the
 downloaded file and import it. A new virtual machine will appear in the list and
-can be started. Make sure a netkork adapter is enabled as `Bridged adapter`
-under ``Network`` settings, and `USB 2.0` is enabled.
+can be started. Make sure a netkork adapter is enabled as *Bridged adapter*
+under ``Network`` settings, and *USB 2.0* is enabled.
 
 The default credentials are:
+
 - User: ``root``
 - Password: ``kirale``
 
