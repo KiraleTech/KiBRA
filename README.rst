@@ -236,9 +236,9 @@ The image is based on Debian Buster and has the required dependancies installed.
 Usage in VirtualBox 5.2.8
 -------------------------
 
-From the VirtualBox main screen go to ``File --> Import appliance...``, find the
+From the VirtualBox main screen go to ``File → Import appliance...``, find the
 downloaded file and import it. A new virtual machine will appear in the list and
-can be started. Make sure a netkork adapter is enabled as *Bridged adapter*
+can be started. Make sure a network adapter is enabled as *Bridged adapter*
 under ``Network`` settings, and *USB 2.0* is enabled.
 
 The default credentials are:
