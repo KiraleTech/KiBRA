@@ -52,12 +52,12 @@ Requirements
 ============
 
 The KiBRA application requires a `Python <https://python.org>`_ 3.5 installation
-and makes use of several PyPi modules, apart from the `KiTools
+and makes use of several PyPI modules, apart from the `KiTools
 <https://github.com/KiraleTechnologies/KiTools>`_ module. It has been tested in
 Debian Buster and Raspbian Buster systems, but it will probably run correctly
 in many other GNU/Linux distributions.
 
-The required system packages are: ``avahi-daemon``, ``dibbler-server``,
+The required system packages are: ``avahi-daemon`` (from v0.7), ``dibbler-server``,
 ``iproute2``, ``ip6tables``, ``jool`` and ``ntp``.
 
 The required Python modules are: ``aiocoap``, ``bash``, ``kitools``,
@@ -265,14 +265,14 @@ clones from the KiTools and KiBRA repositories. You may want to update them for
 last changes:
 ::
 
- cd /root/py36env/KiTools
+ cd /root/py36env
+ source bin/activate
+ cd KiTools
  git pull origin master
  python setup.py install 
  cd /root/py36env/KiBRA
  git pull origin master
  python setup.py install 
- cd /root/py36env
- source bin/activate
 
 At this point, plug in a KTWM102 USB Dongle to a USB port from the host machine
 and capture it for the virtual machine: right click on the bottom USB icon and
