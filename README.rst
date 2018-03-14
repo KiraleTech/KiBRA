@@ -19,6 +19,8 @@ provided Virtual Machine Image Disk which can be run in any modern computer.
 
 This project is licensed under the terms of the MIT license.
 
+.. contents:: :local:
+
 Features
 ========
 
@@ -51,7 +53,7 @@ Future improvements
 Requirements
 ============
 
-The KiBRA application requires a `Python <https://python.org>`_ 3.5 installation
+The KiBRA application requires a `Python <https://python.org>`_ 3.6 installation
 and makes use of several PyPI modules, apart from the `KiTools
 <https://github.com/KiraleTechnologies/KiTools>`_ module. It has been tested in
 Debian Buster and Raspbian Buster systems, but it will probably run correctly
@@ -243,8 +245,8 @@ under ``Network`` settings, and *USB 2.0* is enabled.
 
 The default credentials are:
 
-- User: ``root``
-- Password: ``kirale``
+:User: ``root``
+:Password: ``kirale``
 
 You may want to configure keyboard and time zone:
 ::
