@@ -9,6 +9,8 @@ CFG_PATH = '/opt/kirale/'
 CFG_FILE = CFG_PATH + 'kibra.cfg'
 # Default configuration
 CFG = {'dongle_name': 'Test', 'dongle_commcred': 'KIRALE'}
+# User configuration read from file
+CFG_USER = {}
 
 MUTEX = RLock()
 
@@ -45,12 +47,13 @@ def has_keys(key_list):
 
 
 def load():
-    global CFG
+    global CFG, CFG_USER
     with MUTEX:
         if os.path.isfile(CFG_FILE):
             logging.debug('Loading configuration file %s', CFG_FILE)
             with open(CFG_FILE, 'r') as json_db:
                 CFG = json.load(json_db)
+            CFG_USER = CFG.copy()
         else:
             logging.debug('Using default configuration.')
             os.makedirs(CFG_PATH, exist_ok=True)
@@ -67,7 +70,7 @@ def dump():
 def save():
     '''Save persistent configuration information'''
     with MUTEX:
-        config = {}
+        config = CFG_USER
         config['dongle_name'] = CFG['dongle_name']
         config['dongle_commcred'] = CFG['dongle_commcred']
         config['dongle_serial'] = CFG['dongle_serial']
@@ -75,7 +78,7 @@ def save():
             logging.debug('Saving configuration file %s', CFG_FILE)
             config = json.dumps(OrderedDict(sorted(config.items())), indent=2)
             with open(CFG_FILE, 'w') as file_:
-                file_.write(config)
+                file_.write(config + '\n')
 
 
 def find_in_file(file, prev_patt, follow_patt):
