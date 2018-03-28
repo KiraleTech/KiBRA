@@ -34,7 +34,7 @@ def _enable_ecm():
     logging.info('Serial device is %s.', port)
     db.set('serial_device', port)
     SERIAL_DEV = kiserial.KiSerial(port, debug=kiserial.KiDebug(1))
-    SERIAL_DEV.ksh_cmd('debug level none', debug_level=kiserial.KiDebug(0))
+    SERIAL_DEV.ksh_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
 
     # Save serial number
     db.set('dongle_serial', SERIAL_DEV.ksh_cmd('show snum')[0])
@@ -79,13 +79,11 @@ def _configure():
     dongle_status = ''
     while not ('none' in dongle_status or 'joined' in dongle_status):
         dongle_status = SERIAL_DEV.ksh_cmd(
-            'show status', debug_level=kiserial.KiDebug(0))[0]
+            'show status', debug_level=kiserial.KiDebug.NONE)[0]
         sleep(1)
 
     # Different actions according to dongle status
     if dongle_status == 'none':
-        SERIAL_DEV.ksh_cmd('clear')
-        SERIAL_DEV.wait_for('status', ['none'])
         _dongle_apply_config()
         SERIAL_DEV.ksh_cmd('ifup')
         _configure()
@@ -95,7 +93,9 @@ def _configure():
     elif dongle_status == 'joined':
         pass
     else:  # Other 'none' statuses
-        raise Exception('Dongle status: %s' % dongle_status)
+        logging.warning('Dongle status was "%s".' % dongle_status)
+        SERIAL_DEV.ksh_cmd('clear')
+        _configure()
 
     # Wait until the dongle is a router
     logging.info('Waiting until dongle becomes router...')
