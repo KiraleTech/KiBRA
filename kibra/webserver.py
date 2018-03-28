@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import socketserver
+import sys
 import time
 import xml.etree.ElementTree
 from threading import Thread
@@ -10,7 +11,7 @@ from threading import Thread
 import kibra.database as db
 from kibra.diags import DIAGS_DB
 
-PUBLIC_DIR = os.path.abspath(os.path.dirname(__file__)) + '/public'
+PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
 

@@ -180,7 +180,7 @@ def _ifup():
     idx = db.get('interior_ifnumber')
     # First bring it down to remove old invalid addresses
     IP.link('set', index=idx, state='down')
-    IP.link('set', index=idx, state='up')
+    IP.link('set', index=idx, state='up', txqlen=5000)
 
     # Add inside IPv6 addresses
     logging.info('Configuring interior interface %s with address %s.',

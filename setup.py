@@ -50,6 +50,7 @@ setup(
     ],
     keywords='kirale kinos thread border router',
     packages=['kibra'],
+    include_package_data=True,
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         'kitools', 'bash', 'pyroute2', 'python-iptables', 'aiocoap',
