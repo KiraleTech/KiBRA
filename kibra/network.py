@@ -245,6 +245,7 @@ def _ifup():
     IP.rule(
         'add', family=AF_INET6, table=rt_tables.get('local'), priority=1000)
 
+    '''
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the air)
     logging.info('Traffic rate limit established to %s on interface %s.',
                  '125 kbps', db.get('interior_ifname'))
@@ -256,7 +257,7 @@ def _ifup():
     )
     bash('tc filter add dev ' + db.get('interior_ifname') +
          ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1')
-
+    '''
 
 def _ifdown():
     # Remove custom routing table
@@ -268,9 +269,11 @@ def _ifdown():
     if not idx:
         return
 
+    '''
     # Delete traffic limits
     bash('tc qdisc del dev ' + db.get('interior_ifname') +
          ' root handle 1: cbq avpkt 1000 bandwidth 12mbit')
+    '''
 
     # Delete custom rule
     IP.rule(
