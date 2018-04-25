@@ -10,6 +10,7 @@ from kibra import topology as topology
 from kibra import webserver as webserver
 from kibra.dhcp import DHCP
 from kibra.diags import DIAGS
+from kibra.dns import DNS
 from kibra.ktask import status
 from kibra.mdns import MDNS
 from kibra.nat import NAT
@@ -34,6 +35,7 @@ def _main():
     THREADS.append(NETWORK())
     THREADS.append(DHCP())
     THREADS.append(NAT())
+    THREADS.append(DNS())
     THREADS.append(MDNS())
     THREADS.append(DIAGS())
     for thread in THREADS:

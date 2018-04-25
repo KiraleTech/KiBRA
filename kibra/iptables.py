@@ -36,12 +36,15 @@ def handle_ipv6(action):
          db.get('interior_ifname') + ' -p udp --dport 5683 -j ACCEPT')
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
          db.get('interior_ifname') + ' -p udp --dport 61631 -j ACCEPT')
-    # Allow NTP
-    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
-         db.get('interior_ifname') + ' -p udp --sport 123 -j ACCEPT')
     # Allow DHCPv6 server
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
          db.get('interior_ifname') + ' -p udp --dport dhcpv6-client -j ACCEPT')
+    # Allow NTP server
+    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
+         db.get('interior_ifname') + ' -p udp --sport 123 -j ACCEPT')
+    # Allow DNS server
+    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
+         db.get('interior_ifname') + ' -p udp --sport 53 -j ACCEPT')
     # Allow IPv6 traffic towards the global Thread network
     # bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
     # db.get('interior_ifname') + ' -p ipv6 -d ' +
