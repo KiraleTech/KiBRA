@@ -143,7 +143,7 @@ def dhcp_on():
     pool = prefix.split('/')[0]
     length = prefix.split('/')[1]
     # Flags: dhcp, stable (no on-mesh), DNS
-    SERIAL_DEV.ksh_cmd('config prefix add ' + pool + ' ' + length + ' 0x0B81')
+    SERIAL_DEV.ksh_cmd('config prefix add ' + pool + ' ' + length + ' 0x0B01')
     logging.info('Prefix %s/%s has been announced to the Thread network.',
                  pool, length)
 
@@ -153,7 +153,7 @@ def dhcp_off():
     pool = prefix.split('/')[0]
     length = prefix.split('/')[1]
     SERIAL_DEV.ksh_cmd(
-        'config prefix remove ' + pool + ' ' + length + ' 0x0B81')
+        'config prefix remove ' + pool + ' ' + length + ' 0x0B01')
     logging.info('Prefix %s/%s has been removed from the Thread network.',
                  pool, length)
 
