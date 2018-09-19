@@ -4,18 +4,27 @@ import logging
 import time
 from ipaddress import IPv6Address
 
-from aiocoap import CON, POST, Context, Message
+from aiocoap import CON, Context, Message
+from aiocoap.numbers.codes import Code
 
 import kibra.database as db
-from kibra.shell import bash
 from kibra.ktask import Ktask
-from kibra.tlv import *
+from kibra.shell import bash
+from kibra.thread import TLV
+from kibra.tlv import ThreadTLV
 
-# MAC Addres 16, Route64, Leader Data, IPv6 Address List, Child table
-PET_DIAGS = ThreadTLV(t=18, l=5, v='01 05 06 08 10').array()
-# Channel, PAN ID, Extended PAN ID, Network Name, Network Mesh-Local Prefix,
-# Active Timestamp, Security Policy
-PET_ACT_DATASET = ThreadTLV(t=13, l=7, v='00 01 02 03 07 0c 0e').array()
+VALUES = [
+    TLV.D_MAC_ADDRESS, TLV.D_ROUTE64, TLV.D_LEADER_DATA,
+    TLV.D_IPV6_ADRESS_LIST, TLV.D_CHILD_TABLE
+]
+PET_DIAGS = ThreadTLV(t=TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
+
+VALUES = [
+    TLV.C_CHANNEL, TLV.C_PAN_ID, TLV.C_EXTENDED_PAN_ID, TLV.C_NETWORK_NAME,
+    TLV.C_NETWORK_MESH_LOCAL_PREFIX, TLV.C_ACTIVE_TIMESTAMP,
+    TLV.C_SECURITY_POLICY
+]
+PET_ACT_DATASET = ThreadTLV(t=TLV.C_GET, l=len(VALUES), v=VALUES).array()
 
 URI_D_DG = '/d/dg'
 URI_C_AG = '/c/ag'
@@ -30,7 +39,7 @@ def _epoch_ms():
 
 
 class DiagnosticPetition():
-    '''Perform COAP petitions to the Thread Diagnostics port'''
+    '''Perform CoAP petitions to the Thread Diagnostics port'''
 
     def __init__(self):
         self.loop = asyncio.new_event_loop()
@@ -41,7 +50,7 @@ class DiagnosticPetition():
         '''Client request'''
         if self.protocol is None:
             self.protocol = await Context.create_client_context()
-        req = Message(code=POST, mtype=CON, payload=payload)
+        req = Message(code=Code.POST, mtype=CON, payload=payload)
         req.set_request_uri(
             uri='coap://[%s]:61631%s' % (addr, path), set_uri_host=False)
         try:
@@ -76,9 +85,8 @@ class DIAGS(Ktask):
         self.last_time = 0
 
     def kstart(self):
-        self.br_permanent_addr = '%s%%%s' % (
-            IPv6Address(db.get('dongle_ll')).compressed,
-            db.get('interior_ifname'))
+        self.br_permanent_addr = '%s%%%s' % (IPv6Address(
+            db.get('dongle_ll')).compressed, db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
         # Delete old values to prevent MDNS from using them before obtaning
         # the updated ones
@@ -104,10 +112,10 @@ class DIAGS(Ktask):
         response = ThreadTLV.sub_tlvs(response)
         for tlv in response:
             # Save BR RLOC16
-            if tlv.type is 1:
+            if tlv.type is TLV.D_MAC_ADDRESS:
                 self.br_rloc16 = '%02x%02x' % (tlv.value[0], tlv.value[1])
             # Ignore ID sequence from Route 64 TLV
-            elif tlv.type is 5:
+            elif tlv.type is TLV.D_ROUTE64:
                 tlv.value[0] = 0
         # More requests if changes found in the network or if some time has passed
         current_diags = set(str(tlv) for tlv in response)
@@ -146,7 +154,7 @@ class DIAGS(Ktask):
 
         for tlv in tlvs:
             # Address16 TLV
-            if tlv.type is 1:
+            if tlv.type is TLV.D_MAC_ADDRESS:
                 json_node_info['rloc16'] = '%02x%02x' % (tlv.value[0],
                                                          tlv.value[1])
                 if tlv.value[1] is 0:
@@ -154,7 +162,7 @@ class DIAGS(Ktask):
                 else:
                     json_node_info['roles'].append('end-device')
             # Route 64 TLV
-            elif tlv.type is 5:
+            elif tlv.type is TLV.D_ROUTE64:
                 router_id_mask = bin(
                     int.from_bytes(tlv.value[1:9], byteorder='big'))
                 router_ids = [
@@ -178,10 +186,10 @@ class DIAGS(Ktask):
                     elif q_in is 0 and q_out is 0 and cost is 1:
                         json_node_info['id'] = '%u' % router_id
             # Leader Data TLV
-            elif tlv.type is 6:
+            elif tlv.type is TLV.D_LEADER_DATA:
                 leader_rloc16 = '%04x' % (tlv.value[7] << 10)
             # IPv6 Address List TLV
-            elif tlv.type is 8:
+            elif tlv.type is TLV.D_IPV6_ADRESS_LIST:
                 addresses = [
                     tlv.value[i:i + 16] for i in range(0, tlv.length, 16)
                 ]
@@ -193,7 +201,7 @@ class DIAGS(Ktask):
         # Now process child info, because json_node_info['rloc16'] is needed
         for tlv in tlvs:
             # Child Table TLV
-            if tlv.type is 16:
+            if tlv.type is TLV.D_CHILD_TABLE:
                 children = [
                     tlv.value[i:i + 3] for i in range(0, tlv.length, 3)
                 ]
@@ -270,29 +278,22 @@ class DIAGS(Ktask):
             # Update other parameters
             tlvs = ThreadTLV.sub_tlvs(payload)
             for tlv in tlvs:
-                # Channel TLV
-                if tlv.type is 0:
+                if tlv.type is TLV.C_CHANNEL:
                     db.set('dongle_channel', int(tlv.value[2]))
-                # PAN ID TLV
-                if tlv.type is 1:
+                if tlv.type is TLV.C_PAN_ID:
                     db.set('dongle_panid',
                            '0x' + ''.join('%02x' % byte for byte in tlv.value))
-                # Extended PAN ID TLV
-                if tlv.type is 2:
+                if tlv.type is TLV.C_EXTENDED_PAN_ID:
                     db.set('dongle_xpanid',
                            '0x' + ''.join('%02x' % byte for byte in tlv.value))
-                # Network Name TLV
-                if tlv.type is 3:
+                if tlv.type is TLV.C_NETWORK_NAME:
                     db.set('dongle_netname',
                            ''.join('%c' % byte for byte in tlv.value))
-                # Network Mesh-Local Prefix TLV
-                if tlv.type is 7:
+                if tlv.type is TLV.C_NETWORK_MESH_LOCAL_PREFIX:
                     db.set('dongle_prefix',
                            ''.join('%02x' % byte for byte in tlv.value))
-                # Active Timestamp TLV
-                if tlv.type is 14:
+                if tlv.type is TLV.C_ACTIVE_TIMESTAMP:
                     db.set('bagent_at',
                            ''.join('%02x' % byte for byte in tlv.value))
-                # Security Policy TLV
-                if tlv.type is 12:
+                if tlv.type is TLV.C_SECURITY_POLICY:
                     db.set('bagent_cm', (tlv.value[2] >> 2) & 0x01)
