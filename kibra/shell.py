@@ -1,7 +1,6 @@
 from bash import bash as alexcouperbash
-
-from colorama import init as colinit
 from colorama import Fore
+from colorama import init as colinit
 
 DEBUG = False
 
