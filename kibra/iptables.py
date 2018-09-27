@@ -2,6 +2,7 @@ import logging
 
 import kibra.database as db
 from kibra.shell import bash
+from kibra.thread import DEFS
 
 # TODO: use http://ldx.github.io/python-iptables/
 
@@ -19,23 +20,30 @@ def handle_ipv6(action):
     else:
         return
 
-    ## Filter rules ##
     # Prevent fragmentation
-    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' + db.get(
-        'interior_ifname') + ' -m length --length 1281:0xffff -j REJECT')
+    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
+         db.get('interior_ifname') +
+         ' -m length --length 1281:0xffff -j REJECT')
     # Allow some ICMPv6 traffic towards the Thread interface
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
          db.get('interior_ifname') +
          ' -p icmpv6 --icmpv6-type neighbor-solicitation -j ACCEPT')
-    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' + db.get(
-        'interior_ifname') + ' -p icmpv6 --icmpv6-type echo-request -j ACCEPT')
+    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
+         db.get('interior_ifname') +
+         ' -p icmpv6 --icmpv6-type echo-request -j ACCEPT')
     # Allow CoAP
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
-         db.get('interior_ifname') + ' -p udp --sport 5683 -j ACCEPT')
+         db.get('interior_ifname') + ' -p udp --sport ' + str(DEFS.PORT_COAP) +
+         ' -j ACCEPT')
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
-         db.get('interior_ifname') + ' -p udp --dport 5683 -j ACCEPT')
+         db.get('interior_ifname') + ' -p udp --dport ' + str(DEFS.PORT_COAP) +
+         ' -j ACCEPT')
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
-         db.get('interior_ifname') + ' -p udp --dport 61631 -j ACCEPT')
+         db.get('interior_ifname') + ' -p udp --sport ' + str(DEFS.PORT_MM) +
+         ' -j ACCEPT')
+    bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
+         db.get('interior_ifname') + ' -p udp --dport ' + str(DEFS.PORT_MM) +
+         ' -j ACCEPT')
     # Allow DHCPv6 server
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
          db.get('interior_ifname') + ' -p udp --dport dhcpv6-client -j ACCEPT')
@@ -59,8 +67,9 @@ def handle_ipv6(action):
              db.get('dhcp_pool').split('/')[0] + ' -j DROP')
 
     # Prevent fragmentation
-    bash('ip6tables -w -t filter -' + action + ' FORWARD -o ' + db.get(
-        'interior_ifname') + ' -m length --length 1281:0xffff -j REJECT')
+    bash('ip6tables -w -t filter -' + action + ' FORWARD -o ' +
+         db.get('interior_ifname') +
+         ' -m length --length 1281:0xffff -j REJECT')
     # Forward marked packets for PBR
     bash('ip6tables -w -t filter -' + action + ' FORWARD -m mark --mark "' +
          str(db.get('bridging_mark')) + '" -j ACCEPT')
@@ -77,6 +86,9 @@ def handle_ipv6(action):
          ' FORWARD -p udp -m state --state ESTABLISHED -j ACCEPT')
     bash('ip6tables -w -t filter -' + action +
          ' FORWARD -p icmpv6 -m state --state ESTABLISHED,RELATED -j ACCEPT')
+    # Forward multicast TODO: only for PBBR
+    bash('ip6tables -w -t mangle -' + action +
+         ' PREROUTING -d ff00::/8 -j TTL --ttl-inc 1')
     # Block all other forwarding to the Thread interface
     if 'dhcp_pool' in db.CFG:
         bash('ip6tables -w -t filter -' + action + ' FORWARD -d ' +
@@ -98,8 +110,9 @@ def _handle_ipv4(action):
          db.get('exterior_ifname') + ' -p udp --dport mdns -j ACCEPT')
     bash('iptables -w -t filter -' + action + ' INPUT -i ' +
          db.get('exterior_ifname') + ' -p udp --dport dhcpv6-client -j ACCEPT')
-    bash('iptables -w -t filter -' + action + ' INPUT -i ' + db.get(
-        'exterior_ifname') + ' -m state --state ESTABLISHED,RELATED -j ACCEPT')
+    bash('iptables -w -t filter -' + action + ' INPUT -i ' +
+         db.get('exterior_ifname') +
+         ' -m state --state ESTABLISHED,RELATED -j ACCEPT')
     bash('iptables -w -t filter -' + action + ' INPUT -i ' +
          db.get('exterior_ifname') + ' -j DROP')
 
@@ -114,5 +127,5 @@ def handle_diag(action):
     else:
         return
     bash('ip6tables -w -t mangle -' + action + ' OUTPUT -o lo -d ' +
-         db.get('dongle_rloc') + ' -p udp --dport 61631 -j MARK --set-mark "'
-         + str(db.get('bridging_mark')) + '"')
+         db.get('dongle_rloc') + ' -p udp --dport ' + str(DEFS.PORT_MM) +
+         ' -j MARK --set-mark "' + str(db.get('bridging_mark')) + '"')
