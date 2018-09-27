@@ -10,7 +10,7 @@ from aiocoap.numbers.codes import Code
 import kibra.database as db
 from kibra.ktask import Ktask
 from kibra.shell import bash
-from kibra.thread import TLV
+from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
 
 VALUES = [
@@ -26,8 +26,8 @@ VALUES = [
 ]
 PET_ACT_DATASET = ThreadTLV(t=TLV.C_GET, l=len(VALUES), v=VALUES).array()
 
-URI_D_DG = '/d/dg'
-URI_C_AG = '/c/ag'
+PET_NET_DATA = ThreadTLV(
+    t=TLV.D_TYPE_LIST, l=1, v=[TLV.D_NETWORK_DATA]).array()
 
 NODE_INACTIVE_MS = 90000
 
@@ -52,7 +52,8 @@ class DiagnosticPetition():
             self.protocol = await Context.create_client_context()
         req = Message(code=Code.POST, mtype=CON, payload=payload)
         req.set_request_uri(
-            uri='coap://[%s]:61631%s' % (addr, path), set_uri_host=False)
+            uri='coap://[%s]:%u%s' % (addr, DEFS.PORT_MM, path),
+            set_uri_host=False)
         try:
             response = await self.protocol.request(req).response
         except Exception:
@@ -67,6 +68,10 @@ class DiagnosticPetition():
         self.loop.run_until_complete(self.request(addr, path, payload))
         return self.response
 
+    def stop(self):
+        self.protocol.shutdown()
+        self.loop.stop()
+
 
 class DIAGS(Ktask):
     def __init__(self):
@@ -75,7 +80,7 @@ class DIAGS(Ktask):
             name='diags',
             start_keys=['dongle_ll', 'interior_ifname'],
             start_tasks=['serial', 'network'],
-            period=5)
+            period=3)
         self.petitioner = DiagnosticPetition()
         self.br_rloc16 = ''
         self.br_permanent_addr = ''
@@ -85,13 +90,15 @@ class DIAGS(Ktask):
         self.last_time = 0
 
     def kstart(self):
-        self.br_permanent_addr = '%s%%%s' % (IPv6Address(
-            db.get('dongle_ll')).compressed, db.get('interior_ifname'))
+        ll_addr = IPv6Address(db.get('dongle_ll')).compressed
+        self.br_permanent_addr = '%s%%%s' % (ll_addr,
+                                             db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
         # Delete old values to prevent MDNS from using them before obtaning
         # the updated ones
         db.delete('dongle_xpanid')
         db.delete('dongle_netname')
+        db.set('bbr_status', 'off')
 
     def kstop(self):
         self.petitioner.protocol.shutdown()
@@ -99,13 +106,15 @@ class DIAGS(Ktask):
 
     def periodic(self):
         # Check internet connection
+        '''
         ping = int(
             str(
                 bash('ping -c 1 -s 0 -I %s -q 8.8.8.8 > /dev/null ; echo $?' %
                      db.get('exterior_ifname'))))
         self.br_internet_access = 'online' if ping is 0 else 'offline'
+        '''
         # Diags
-        response = self.petitioner.petition(self.br_permanent_addr, URI_D_DG,
+        response = self.petitioner.petition(self.br_permanent_addr, URI.D_DG,
                                             PET_DIAGS)
         if not response:
             return
@@ -114,10 +123,12 @@ class DIAGS(Ktask):
             # Save BR RLOC16
             if tlv.type is TLV.D_MAC_ADDRESS:
                 self.br_rloc16 = '%02x%02x' % (tlv.value[0], tlv.value[1])
+                # TODO: update dongle_rloc and Linux address
             # Ignore ID sequence from Route 64 TLV
             elif tlv.type is TLV.D_ROUTE64:
                 tlv.value[0] = 0
-        # More requests if changes found in the network or if some time has passed
+        # More requests if changes found in the network or if some time has
+        # passed
         current_diags = set(str(tlv) for tlv in response)
         current_time = _epoch_ms()
         if current_diags != self.last_diags or current_time > (
@@ -125,18 +136,22 @@ class DIAGS(Ktask):
             self.last_diags = current_diags
             self.last_time = current_time
             self._parse_diags(response)
+            # Network Data get
+            response = self.petitioner.petition(self.br_permanent_addr,
+                                                URI.D_DG, PET_NET_DATA)
+            self._parse_net_data(response)
             # Active Data Set get
             response = self.petitioner.petition(self.br_permanent_addr,
-                                                URI_C_AG, PET_ACT_DATASET)
+                                                URI.C_AG, PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
             for rloc16 in self.nodes_list:
                 if rloc16 == self.br_rloc16:
                     continue
-                node_rloc = IPv6Address(
-                    int(db.get('dongle_prefix') + '000000fffe00' + rloc16,
-                        16)).compressed
-                response = self.petitioner.petition(node_rloc, URI_D_DG,
+                int_addr = int(
+                    '%s000000fffe00%s' % (db.get('dongle_prefix'), rloc16), 16)
+                node_rloc = IPv6Address(int_addr).compressed
+                response = self.petitioner.petition(node_rloc, URI.D_DG,
                                                     PET_DIAGS)
                 if response:
                     response = ThreadTLV.sub_tlvs(response)
@@ -246,7 +261,7 @@ class DIAGS(Ktask):
                 # Remove old data
                 DIAGS_DB['nodes'].pop(index)
         # Set firstSeen
-        if not 'firstSeen' in json_node_info:
+        if 'firstSeen' not in json_node_info:
             logging.info('New node! "%s"', json_node_info['rloc16'])
             json_node_info['firstSeen'] = _epoch_ms()
         # Set new data
@@ -297,3 +312,30 @@ class DIAGS(Ktask):
                            ''.join('%02x' % byte for byte in tlv.value))
                 if tlv.type is TLV.C_SECURITY_POLICY:
                     db.set('bagent_cm', (tlv.value[2] >> 2) & 0x01)
+
+    def _parse_net_data(self, tlvs):
+        sub_tlvs = []
+
+        for tlv in ThreadTLV.sub_tlvs(tlvs):
+            if tlv.type is TLV.D_NETWORK_DATA:
+                sub_tlvs = ThreadTLV.sub_tlvs(tlv.value)
+
+        for tlv in sub_tlvs:
+            if tlv.type >> 1 is TLV.N_SERVICE:
+                # Detect BBR Dataset encoding
+                if (tlv.value[0] >> 7 and tlv.value[1] is 1
+                        and tlv.value[2] is 1):
+                    server_tlvs = ThreadTLV.sub_tlvs(tlv.value[3:])
+                    '''BBR is primary if there is only one Server TLV in the
+                    BBR Dataset and the RLOC16 is the same as ours'''
+                    if len(server_tlvs) == 1:
+                        node_rloc = IPv6Address(db.get('dongle_rloc')).packed
+                        if node_rloc[14:16] == server_tlvs[0].value[0:2]:
+                            if 'primary' not in db.get('bbr_status'):
+                                logging.info('Setting this BBR as Primary')
+                            db.set('bbr_status', 'primary')
+                            return
+        # TODO: stop mcproxy when passing from primary to secondary
+        if 'secondary' not in db.get('bbr_status'):
+            logging.info('Setting this BBR as Secondary')
+        db.set('bbr_status', 'secondary')

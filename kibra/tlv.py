@@ -13,10 +13,7 @@ class ThreadTLV():
             self.data.append(t)
             self.data.append(l)
             if l > 0:
-                if isinstance(v, str):
-                    self.data.extend(bytearray.fromhex(v))
-                else:
-                    raise Exception('Bad data.')
+                self.data.extend(bytearray(v))
         else:
             raise Exception('Bad data.')
 

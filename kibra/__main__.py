@@ -2,12 +2,15 @@
 '''Kirale Border Router Administration'''
 
 import argparse
+import asyncio
 import logging
 from time import sleep
 
 from kibra import database as db
 from kibra import topology as topology
 from kibra import webserver as webserver
+from kibra.coapserver import COAPSERVER
+
 from kibra.dhcp import DHCP
 from kibra.diags import DIAGS
 from kibra.dns import DNS
@@ -33,11 +36,12 @@ def _main():
     # Start subtasks
     THREADS.append(SERIAL())
     THREADS.append(NETWORK())
-    THREADS.append(DHCP())
-    THREADS.append(NAT())
-    THREADS.append(DNS())
+    #THREADS.append(DHCP())
+    #THREADS.append(NAT())
+    #THREADS.append(DNS())
     THREADS.append(MDNS())
     THREADS.append(DIAGS())
+    THREADS.append(COAPSERVER())
     for thread in THREADS:
         thread.start()
 

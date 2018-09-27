@@ -1,10 +1,14 @@
 import logging
+import struct
 from time import sleep
 
 from kitools import kiserial
+
 import kibra.database as db
-from kibra.network import dongle_conf
 from kibra.ktask import Ktask
+from kibra.network import dongle_conf
+from kibra.tlv import ThreadTLV
+from kibra.thread import TLV
 
 SERIAL_DEV = None
 
@@ -117,7 +121,10 @@ def _dongle_get_config():
     # Get mesh rloc and link local addresses
     addrs = SERIAL_DEV.ksh_cmd('show ipaddr')
     for ip6_addr in addrs:
-        if ip6_addr.startswith('fe80'):
+        if ip6_addr.startswith('ff'):
+            # KiNOS registers multicast addresses with MLR.req
+            continue
+        elif ip6_addr.startswith('fe80'):
             db.set('dongle_ll', ip6_addr.strip('\r\n'))
             logging.info('Link local address is %s.', db.get('dongle_ll'))
         else:
@@ -136,6 +143,25 @@ def _enable_br():
     SERIAL_DEV.ksh_cmd('config brouter on')
     logging.info('Border router has been enabled.')
 
+    THREAD_ENTERPRISE_NUMBER = 44970
+    THREAD_SERVICE_DATA_BBR = '01'
+    BBR_DEF_SEQ_NUM = 0
+    BBR_DEF_REREG_DELAY = 4
+    BBR_DEF_MLT_TIMEOUT = 300
+
+    # Build s_server_data
+    bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
+    registration_delay = db.get('rereg_delay') or BBR_DEF_REREG_DELAY
+    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLT_TIMEOUT
+    s_server_data = struct.pack('!BII', bbr_sequence_number,
+                                registration_delay, mlr_timeout)
+
+    # Enable BBR
+    SERIAL_DEV.ksh_cmd('config service add %u %s %s' %
+                       (THREAD_ENTERPRISE_NUMBER, THREAD_SERVICE_DATA_BBR,
+                        bytes(s_server_data).hex()))
+    logging.info('BBR has been enabled.')
+
 
 def dhcp_on():
     ''''Announce DHCP prefix'''
@@ -152,8 +178,8 @@ def dhcp_off():
     prefix = db.get('dhcp_pool')
     pool = prefix.split('/')[0]
     length = prefix.split('/')[1]
-    SERIAL_DEV.ksh_cmd(
-        'config prefix remove ' + pool + ' ' + length + ' 0x0B01')
+    SERIAL_DEV.ksh_cmd('config prefix remove ' + pool + ' ' + length +
+                       ' 0x0B01')
     logging.info('Prefix %s/%s has been removed from the Thread network.',
                  pool, length)
 
@@ -181,6 +207,10 @@ def _bagent_off():
     logging.info('Border agent has been disabled.')
 
 
+def add_mcaddr():
+    SERIAL_DEV.ksh_cmd('config ipaddr add ff0e::1234')
+
+
 class SERIAL(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -196,10 +226,10 @@ class SERIAL(Ktask):
         _configure()
         _dongle_get_config()
         _enable_br()
-        _bagent_on()
+        # _bagent_on()
 
     def kstop(self):
-        _bagent_off()
+        # _bagent_off()
         SERIAL_DEV.ksh_cmd('ifdown')
 
     def periodic(self):
