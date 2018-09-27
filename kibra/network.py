@@ -44,7 +44,7 @@ def _get_ula():
 
 
 def _get_prefix(exterior_ifname):
-    #TODO: Parse the leases file properly to make sure it is valid
+    # TODO: Parse the leases file properly to make sure it is valid
     prefix = db.find_in_file(DHCLIENT6_LEASES_FILE, 'iaprefix ', ' {')
     if prefix:
         logging.info('Obtained global prefix %s', prefix)
@@ -83,10 +83,10 @@ def _get_ext_ifname():
     index = def_routes[0].get_attr('RTA_OIF')
     return IP.get_links(index)[0].get_attr('IFLA_IFNAME')
     # Old:
-    #Return the name of the first active interface found
-    #for link in IP.get_links():
-    #    if 'UP' in link.get_attr('IFLA_OPERSTATE'):
-    #        return link.get_attr('IFLA_IFNAME')
+    # Return the name of the first active interface found
+    # for link in IP.get_links():
+    #     if 'UP' in link.get_attr('IFLA_OPERSTATE'):
+    #         return link.get_attr('IFLA_IFNAME')
 
 
 def dongle_conf():
@@ -95,16 +95,17 @@ def dongle_conf():
     _global_netconfig()
     # Detect exterior interface addresses
     ipv4 = get_addr(db.get('exterior_ifname'), AF_INET)
-    if ipv4 != None:
+    if ipv4:
         logging.info('Using %s as exterior IPv4 address.', ipv4)
         db.set('exterior_ipv4', ipv4)
     # ipv6 = get_addr(db.get('exterior_ifname'), AF_INET6)
     ipv6 = None
-    if ipv6 != None:
+    if ipv6:
         logging.info('Using %s as exterior IPv6 address.', ipv6)
         db.set('exterior_ipv6', ipv6)
 
-    # By Kirale convention, interior MAC address is obtained from the dongle serial
+    # By Kirale convention, interior MAC address is obtained from the dongle
+    # serial
     serial = db.get('dongle_serial').split('+')[-1]
     interior_mac = ':'.join([
         serial[0:2], serial[2:4], serial[4:6], serial[10:12], serial[12:14],
@@ -121,8 +122,8 @@ def dongle_conf():
         db.set('interior_ifname', links[0].get_attr('IFLA_IFNAME'))
         db.set('interior_ifnumber', links[0]['index'])
     else:
-        raise Exception(
-            'Error: Device not found with MAC ' + db.get('interior_mac'))
+        raise Exception('Error: Device not found with MAC ' +
+                        db.get('interior_mac'))
 
     # Use last 32 bits of interior MAC as bridging mark
     db.set('bridging_mark',
@@ -134,9 +135,11 @@ def dongle_conf():
     # Load or generate the Pool4 prefix
     if not db.has_keys(['pool4']):
         # Default Kirale NAT IPv4 pool, with room for 64k nodes (>32*512).
-        # Last byte of the interior MAC is used to compose the IPv4 network address
-        db.set('pool4', '10.' +
-               str(int(db.get('interior_mac').split(':')[-1], 16)) + '.0.0/16')
+        # Last byte of the interior MAC is used to compose the IPv4 network
+        # address
+        db.set(
+            'pool4', '10.' + str(
+                int(db.get('interior_mac').split(':')[-1], 16)) + '.0.0/16')
     elif int(db.get('pool4').split('/')[1]) % 8 != 0:
         raise Exception('Error: Pool4 prefix length must be a 8 multiple.')
 
@@ -168,12 +171,13 @@ def _rt_add_table(name, number):
 
 def _ifup():
     # Make sure forwarding is enabled
-    bash('sysctl -w net.ipv4.conf.all.forwarding=1')
-    bash('sysctl -w net.ipv6.conf.all.forwarding=1')
+    bash('echo 1 > /proc/sys/net/ipv4/conf/all/forwarding')
+    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
     logging.info('Forwarding has been enabled.')
 
     # Disable duplicate address detection for the interior interface
-    bash('sysctl -w net.ipv6.conf.%s.accept_dad=0' % db.get('interior_ifname'))
+    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' %
+         db.get('interior_ifname'))
     logging.info('DAD has been disabled for %s.', db.get('interior_ifname'))
 
     # Bring interior interface up
@@ -244,31 +248,31 @@ def _ifup():
                 priority=rule.get_attr('FRA_PRIORITY') or 0)
     IP.rule(
         'add', family=AF_INET6, table=rt_tables.get('local'), priority=1000)
-
     '''
-    # Rate limit traffic to the interface, 125 kbps (maximum data rate in the air)
+    # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
+    # air)
     logging.info('Traffic rate limit established to %s on interface %s.',
                  '125 kbps', db.get('interior_ifname'))
     bash('tc qdisc add dev ' + db.get('interior_ifname') +
          ' root handle 1: cbq avpkt 1000 bandwidth 12mbit')
-    bash(
-        'tc class add dev ' + db.get('interior_ifname') +
-        ' parent 1: classid 1:1 cbq rate 125kbit allot 1500 prio 5 bounded isolated'
-    )
+    bash('tc class add dev ' + db.get('interior_ifname') +
+         ' parent 1: classid 1:1 cbq rate 125kbit ' +
+         'allot 1500 prio 5 bounded isolated')
     bash('tc filter add dev ' + db.get('interior_ifname') +
          ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1')
     '''
 
+
 def _ifdown():
     # Remove custom routing table
-    db.del_from_file('/etc/iproute2/rt_tables', '\n%s\t%s\n' %
-                     (BR_TABLE_NR, db.get('bridging_table')), '')
+    db.del_from_file('/etc/iproute2/rt_tables',
+                     '\n%s\t%s\n' % (BR_TABLE_NR, db.get('bridging_table')),
+                     '')
 
     # Don't continue if the interface is already down
     idx = IP.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
     if not idx:
         return
-
     '''
     # Delete traffic limits
     bash('tc qdisc del dev ' + db.get('interior_ifname') +
