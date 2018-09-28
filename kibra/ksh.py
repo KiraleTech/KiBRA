@@ -55,6 +55,7 @@ def _enable_ecm():
 
 def _dongle_apply_config():
     # Config network parameters
+    SERIAL_DEV.ksh_cmd('config legacy off') # Enable Thread 1.2
     if 'dongle_channel' in db.CFG:
         logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
         SERIAL_DEV.ksh_cmd('config channel %s' % db.get('dongle_channel'))
@@ -146,13 +147,13 @@ def _enable_br():
     THREAD_ENTERPRISE_NUMBER = 44970
     THREAD_SERVICE_DATA_BBR = '01'
     BBR_DEF_SEQ_NUM = 0
-    BBR_DEF_REREG_DELAY = 4
-    BBR_DEF_MLT_TIMEOUT = 300
+    BBR_DEF_REREG_DELAY = 4*1000
+    BBR_DEF_MLR_TIMEOUT = 300
 
     # Build s_server_data
     bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
     registration_delay = db.get('rereg_delay') or BBR_DEF_REREG_DELAY
-    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLT_TIMEOUT
+    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLR_TIMEOUT
     s_server_data = struct.pack('!BII', bbr_sequence_number,
                                 registration_delay, mlr_timeout)
 
