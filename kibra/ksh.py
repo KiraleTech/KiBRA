@@ -132,6 +132,7 @@ def _dongle_get_config():
                 db.set('dongle_rloc', ip6_addr.strip('\r\n'))
                 logging.info('RLOC address is %s.', db.get('dongle_rloc'))
             else:
+                # TODO: check prefix
                 db.set('dongle_eid', ip6_addr.strip('\r\n'))
                 logging.info('EID address is %s.', db.get('dongle_eid'))
     if not db.has_keys(['dongle_rloc']):

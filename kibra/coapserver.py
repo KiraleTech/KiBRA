@@ -246,7 +246,6 @@ class COAPSERVER(Ktask):
         time.sleep(3)
         KSH.add_mcaddr()
         # TODO: /n/dr
-        #asyncio.get_event_loop().run_until_complete(self.server_mm.task)
         asyncio.get_event_loop().run_forever()
 
     def kstop(self):
