@@ -101,12 +101,12 @@ def _configure():
     logging.info('Waiting until dongle becomes router...')
     db.set('dongle_role', 'none')
     # Selection jitter 120 s
-    SERIAL_DEV.wait_for('role', ['router', 'leader'])
+    SERIAL_DEV.wait_for('role', ['router', 'leader'], 120)
 
     # A non-router device can't be border router
     if SERIAL_DEV.ksh_cmd('show role')[0] not in ('router', 'leader'):
         SERIAL_DEV.ksh_cmd('clear')
-        SERIAL_DEV.wait_for('status', ['none'])
+        SERIAL_DEV.wait_for('status', ['none'], 10)
         _configure()
 
 
