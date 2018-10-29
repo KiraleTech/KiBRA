@@ -121,8 +121,8 @@ class Ktask(Thread):
                             logging.info(
                                 'Task [%s] is waiting for [%s] to stop.',
                                 self.name, task)
-                            while db.get(
-                                    'status_' + task) is not status.STOPPED:
+                            while db.get('status_' +
+                                         task) is not status.STOPPED:
                                 sleep(1)
                         self.kstop()
                         if task_action is action.KILL:

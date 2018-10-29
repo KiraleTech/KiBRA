@@ -4,11 +4,13 @@ import ipaddress
 import logging
 import os
 import time
-from socket import AF_INET6
+import socket
+import struct
 
 import aiocoap
 import aiocoap.resource as resource
 from aiocoap.numbers.codes import Code
+from aiocoap.numbers.types import Type
 from pyroute2 import IPRoute
 
 import kibra.database as db
@@ -145,6 +147,7 @@ class Res_N_MR(resource.Resource):
 
             for tlv in ThreadTLV.sub_tlvs(request.payload):
                 if tlv.type is TLV.A_IPV6_ADDRESSES and tlv.length % 16 is 0:
+                    ipv6_addressses_tlv = tlv
                     status, addrs = Res_N_MR._parse_addrs(tlv)
                 elif tlv.type is TLV.A_TIMEOUT and tlv.length == 4:
                     timeout = tlv.value
@@ -158,7 +161,24 @@ class Res_N_MR(resource.Resource):
                 else:
                     addr_tout = db.get('mlr_timeout') or DEFS.MIN_MLR_TIMEOUT
                 MCAST_HNDLR.reg_update(addrs, addr_tout)
-                # TODO: BMLR.ntf
+                # Send BMLR.ntf
+                timeout_tlv = ThreadTLV(
+                    t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout))
+                payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
+                dst = db.get('all_network_bbrs')
+                # CoapClient().petition(dst, DEFS.PORT_BB, URI.B_BMR, payload)
+                req = aiocoap.Message(
+                    mid=1234, code=Code.POST, mtype=Type.NON, payload=payload)
+                req.set_request_uri(
+                    uri='coap://[%s]:%u%s' % (dst, DEFS.PORT_BB, URI.B_BMR),
+                    set_uri_host=False)
+                #print(req.encode().hex())
+                sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 5)
+                #sock.bind(('::', 9876))
+                sock.sendto(req.encode(), (dst, DEFS.PORT_BB))
+                sock.close()
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status])
@@ -205,6 +225,31 @@ class CoapServer():
 
     def stop(self):
         self.task.cancel()
+
+
+class CoapClient():
+    '''Perform CoAP petitions to the Thread Diagnostics port'''
+
+    def __init__(self):
+        self.loop = asyncio.new_event_loop()
+        self.protocol = None
+        self.response = None
+
+    async def request(self, addr, port, path, payload):
+        '''Client request'''
+        if self.protocol is None:
+            self.protocol = await aiocoap.Context.create_client_context()
+        req = aiocoap.Message(code=Code.POST, mtype=Type.NON, payload=payload)
+        req.set_request_uri(
+            uri='coap://[%s]:%u%s' % (addr, port, path), set_uri_host=False)
+        self.protocol.request(req)
+
+    async def petition(self, addr, port, path, payload):
+        '''Petition'''
+        await self.loop.run_until_complete(
+            self.request(addr, port, path, payload))
+        self.protocol.shutdown()
+        self.loop.stop()
 
 
 class COAPSERVER(Ktask):
@@ -256,4 +301,5 @@ class COAPSERVER(Ktask):
         db.set('bbr_status', 'off')
 
     def periodic(self):
+        # TODO: not reaching here because loop is running forever
         MCAST_HNDLR.reg_periodic()
