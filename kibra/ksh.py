@@ -234,7 +234,7 @@ class SERIAL(Ktask):
         # _bagent_off()
         SERIAL_DEV.ksh_cmd('ifdown')
 
-    def periodic(self):
+    async def periodic(self):
         # Detect if serial was disconnected
         try:
             SERIAL_DEV.is_active()

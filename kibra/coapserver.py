@@ -3,22 +3,22 @@ import datetime
 import ipaddress
 import logging
 import os
-import time
 import socket
 import struct
+import time
 
 import aiocoap
 import aiocoap.resource as resource
-from aiocoap.numbers.codes import Code
-from aiocoap.numbers.types import Type
-from pyroute2 import IPRoute
-
 import kibra.database as db
 import kibra.ksh as KSH
+from aiocoap.numbers.codes import Code
+from aiocoap.numbers.types import Type
+from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
+from pyroute2 import IPRoute
 
 # Global variables
 IP = IPRoute()
@@ -82,7 +82,7 @@ class MulticastHandler():
                      (addr, addr_tout))
 
     def addr_remove(self, addr):
-        self.maddrs.popitem(addr)
+        self.maddrs.pop(addr)
         # TODO: remove persistent
 
         # Update mcproxy configuration
@@ -101,8 +101,8 @@ class MulticastHandler():
 
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
-        for addr, tout in self.maddrs:
-            if tout < now:
+        for addr in self.maddrs:
+            if self.maddrs[addr] < now:
                 self.addr_remove(addr)
 
 
@@ -166,7 +166,7 @@ class Res_N_MR(resource.Resource):
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout))
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
                 dst = db.get('all_network_bbrs')
-                # CoapClient().petition(dst, DEFS.PORT_BB, URI.B_BMR, payload)
+                # CoapClient().petition(dst, DEFS.PORT_BB, URI.B_BMR, payload, NON)
                 req = aiocoap.Message(
                     mid=1234, code=Code.POST, mtype=Type.NON, payload=payload)
                 req.set_request_uri(
@@ -227,31 +227,6 @@ class CoapServer():
         self.task.cancel()
 
 
-class CoapClient():
-    '''Perform CoAP petitions to the Thread Diagnostics port'''
-
-    def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        self.protocol = None
-        self.response = None
-
-    async def request(self, addr, port, path, payload):
-        '''Client request'''
-        if self.protocol is None:
-            self.protocol = await aiocoap.Context.create_client_context()
-        req = aiocoap.Message(code=Code.POST, mtype=Type.NON, payload=payload)
-        req.set_request_uri(
-            uri='coap://[%s]:%u%s' % (addr, port, path), set_uri_host=False)
-        self.protocol.request(req)
-
-    async def petition(self, addr, port, path, payload):
-        '''Petition'''
-        await self.loop.run_until_complete(
-            self.request(addr, port, path, payload))
-        self.protocol.shutdown()
-        self.loop.stop()
-
-
 class COAPSERVER(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -272,7 +247,6 @@ class COAPSERVER(Ktask):
         db.set('all_network_bbrs', all_network_bbrs)
         # TODO: update it if dongle_prefix changes
 
-        asyncio.set_event_loop(asyncio.new_event_loop())
         # Thread side server
         # TODO: bind to both RLOC and LL
         self.server_mm = CoapServer(
@@ -291,15 +265,12 @@ class COAPSERVER(Ktask):
         time.sleep(3)
         KSH.add_mcaddr()
         # TODO: /n/dr
-        asyncio.get_event_loop().run_forever()
 
     def kstop(self):
         self.server_mm.stop()
         self.server_mc.stop()
         self.server_bb.stop()
-        asyncio.get_event_loop().stop()
         db.set('bbr_status', 'off')
 
-    def periodic(self):
-        # TODO: not reaching here because loop is running forever
+    async def periodic(self):
         MCAST_HNDLR.reg_periodic()

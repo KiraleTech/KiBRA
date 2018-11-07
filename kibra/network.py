@@ -323,7 +323,7 @@ class NETWORK(Ktask):
         iptables.handle_ipv6('D')
         _ifdown()
 
-    def periodic(self):
+    async def periodic(self):
         if not IP.link_lookup(
                 ifname=db.get('interior_ifname'), operstate='UP'):
             logging.error('Interface %s went down.', db.get('interior_ifname'))

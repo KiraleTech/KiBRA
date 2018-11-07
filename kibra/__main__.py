@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 '''Kirale Border Router Administration'''
 
+import asyncio
 import argparse
 import asyncio
 import logging
@@ -20,9 +21,27 @@ from kibra.nat import NAT
 from kibra.network import NETWORK
 from kibra.ksh import SERIAL
 
-THREADS = []
+TASKS = []
 SERVER = None
 
+async def _master():
+    # Wait until all tasks have started
+    for thread in TASKS:
+        while db.get('status_' + thread.name) is not status.RUNNING:
+            await asyncio.sleep(1)
+    logging.info('All tasks have now started.')
+    db.save()
+
+    # Run forever
+    tasks_alive = True
+    while tasks_alive:
+        tasks_alive = False
+        for thread in TASKS:
+            if db.get('status_' + thread.name) is status.RUNNING:
+                tasks_alive = True
+        await asyncio.sleep(0.2)
+
+    logging.info('Bye bye!')
 
 def _main():
     global SERVER
@@ -33,49 +52,24 @@ def _main():
     # Start web interface
     webserver.start()
 
+    loop = asyncio.get_event_loop()
+
     # Start subtasks
-    THREADS.append(SERIAL())
-    THREADS.append(NETWORK())
-    #THREADS.append(DHCP())
-    #THREADS.append(NAT())
-    #THREADS.append(DNS())
-    THREADS.append(MDNS())
-    THREADS.append(DIAGS())
-    THREADS.append(COAPSERVER())
-    for thread in THREADS:
-        thread.start()
+    TASKS.append(SERIAL())
+    TASKS.append(NETWORK())
+    TASKS.append(DHCP())
+    TASKS.append(NAT())
+    TASKS.append(DNS())
+    TASKS.append(MDNS())
+    TASKS.append(DIAGS())
+    TASKS.append(COAPSERVER())
+    
+    asyncio.ensure_future(_master())
+    for thread in TASKS:
+        asyncio.ensure_future(thread.run())
+    
+    loop.run_forever()
 
-    # Wait until all tasks have started
-    try:
-        for thread in THREADS:
-            while db.get('status_' + thread.name) is not status.RUNNING:
-                sleep(1)
-        logging.info('All tasks have now started.')
-        db.save()
-    except KeyboardInterrupt:
-        logging.info('Attempting to close all tasks, please wait...')
-        for thread in THREADS:
-            thread.kill()
-
-    # Do nothing until Control+C is pressed
-    tasks_alive = True
-    try:
-        while tasks_alive:
-            tasks_alive = False
-            for thread in THREADS:
-                if db.get('status_' + thread.name) is status.RUNNING:
-                    tasks_alive = True
-            sleep(0.2)
-    except KeyboardInterrupt:
-        logging.info('Attempting to close all tasks, please wait...')
-        for thread in THREADS:
-            thread.kill()
-
-    # Let tasks finish
-    for thread in THREADS:
-        thread.join()
-    logging.info('All tasks stopped.')
-    logging.info('Bye bye!')
 
 
 if __name__ == '__main__':

@@ -4,10 +4,8 @@ import logging
 import time
 from ipaddress import IPv6Address
 
-from aiocoap import CON, Context, Message
-from aiocoap.numbers.codes import Code
-
 import kibra.database as db
+from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
@@ -38,41 +36,6 @@ def _epoch_ms():
     return int(time.mktime(time.localtime()) * 1000)
 
 
-class DiagnosticPetition():
-    '''Perform CoAP petitions to the Thread Diagnostics port'''
-
-    def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        self.protocol = None
-        self.response = None
-
-    async def request(self, addr, path, payload=''):
-        '''Client request'''
-        if self.protocol is None:
-            self.protocol = await Context.create_client_context()
-        req = Message(code=Code.POST, mtype=CON, payload=payload)
-        req.set_request_uri(
-            uri='coap://[%s]:%u%s' % (addr, DEFS.PORT_MM, path),
-            set_uri_host=False)
-        try:
-            response = await self.protocol.request(req).response
-        except Exception:
-            logging.debug('No response from %s', addr)
-            self.response = None
-        else:
-            logging.debug('%s responded with %s.', addr, response.code)
-            self.response = response.payload
-
-    def petition(self, addr, path, payload):
-        '''Petition'''
-        self.loop.run_until_complete(self.request(addr, path, payload))
-        return self.response
-
-    def stop(self):
-        self.protocol.shutdown()
-        self.loop.stop()
-
-
 class DIAGS(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -81,7 +44,7 @@ class DIAGS(Ktask):
             start_keys=['dongle_ll', 'interior_ifname'],
             start_tasks=['serial', 'network'],
             period=3)
-        self.petitioner = DiagnosticPetition()
+        self.petitioner = CoapClient()
         self.br_rloc16 = ''
         self.br_permanent_addr = ''
         self.br_internet_access = 'offline'
@@ -102,9 +65,9 @@ class DIAGS(Ktask):
 
     def kstop(self):
         self.petitioner.protocol.shutdown()
-        self.petitioner.loop.stop()
+        #self.petitioner.loop.stop()
 
-    def periodic(self):
+    async def periodic(self):
         # Check internet connection
         '''
         ping = int(
@@ -114,8 +77,8 @@ class DIAGS(Ktask):
         self.br_internet_access = 'online' if ping is 0 else 'offline'
         '''
         # Diags
-        response = self.petitioner.petition(self.br_permanent_addr, URI.D_DG,
-                                            PET_DIAGS)
+        response = await self.petitioner.request(
+            self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
         if not response:
             return
         response = ThreadTLV.sub_tlvs(response)
@@ -137,12 +100,13 @@ class DIAGS(Ktask):
             self.last_time = current_time
             self._parse_diags(response)
             # Network Data get
-            response = self.petitioner.petition(self.br_permanent_addr,
-                                                URI.D_DG, PET_NET_DATA)
+            response = await self.petitioner.request(
+                self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA)
             self._parse_net_data(response)
             # Active Data Set get
-            response = self.petitioner.petition(self.br_permanent_addr,
-                                                URI.C_AG, PET_ACT_DATASET)
+            response = await self.petitioner.request(self.br_permanent_addr,
+                                                     DEFS.PORT_MM, URI.C_AG,
+                                                     PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
             for rloc16 in self.nodes_list:
@@ -151,8 +115,8 @@ class DIAGS(Ktask):
                 int_addr = int(
                     '%s000000fffe00%s' % (db.get('dongle_prefix'), rloc16), 16)
                 node_rloc = IPv6Address(int_addr).compressed
-                response = self.petitioner.petition(node_rloc, URI.D_DG,
-                                                    PET_DIAGS)
+                response = await self.petitioner.request(
+                    node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
                 if response:
                     response = ThreadTLV.sub_tlvs(response)
                     self._parse_diags(response)
@@ -166,6 +130,7 @@ class DIAGS(Ktask):
         json_node_info['routes'] = []
         json_node_info['addresses'] = []
         json_node_info['children'] = []
+        leader_rloc16 = None
 
         for tlv in tlvs:
             # Address16 TLV
@@ -231,7 +196,7 @@ class DIAGS(Ktask):
                     json_node_info['children'].append(json_child_info)
 
         # Update other informations
-        if json_node_info['rloc16'] in leader_rloc16:
+        if leader_rloc16 and json_node_info['rloc16'] in leader_rloc16:
             json_node_info['roles'].append('leader')
         if json_node_info['rloc16'] in self.br_rloc16:
             json_node_info['roles'].append('border-router')

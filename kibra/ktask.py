@@ -1,7 +1,6 @@
 import abc
 import logging
-from threading import Thread
-from time import sleep
+import asyncio
 
 import kibra.database as db
 
@@ -21,7 +20,7 @@ class action:
     KILL = 'kill'
 
 
-class Ktask(Thread):
+class Ktask():
     __metaclass__ = abc.ABCMeta
 
     def __init__(self,
@@ -49,7 +48,7 @@ class Ktask(Thread):
     def kstop(self):
         '''Stop.'''
 
-    def periodic(self):
+    async def periodic(self):
         pass
 
     def check_status(self):
@@ -60,7 +59,7 @@ class Ktask(Thread):
         db.set(self.action_key, action.KILL)
         db.set(self.status_key, status.STOPPING)
 
-    def run(self):
+    async def run(self):
         logging.info('Loading task [%s]...', self.name)
         self.is_alive = True
 
@@ -83,10 +82,10 @@ class Ktask(Thread):
                         logging.info('Task [%s] is waiting for [%s] to start.',
                                      self.name, task)
                         while db.get('status_' + task) is not status.RUNNING:
-                            sleep(1)
+                            await asyncio.sleep(1)
                     # Wait for keys
                     while not db.has_keys(self.start_keys):
-                        sleep(1)
+                        await asyncio.sleep(1)
                     try:
                         self.kstart()
                         db.set(self.status_key, status.RUNNING)
@@ -111,7 +110,7 @@ class Ktask(Thread):
                 # Periodic tasks
                 if task_action is action.NONE:
                     # Avoid execution on start/stop processes
-                    self.periodic()
+                    await self.periodic()
             # Stop task if needed
             if task_status is status.STOPPING:
                 if (task_action is action.STOP) or (task_action is
@@ -123,7 +122,7 @@ class Ktask(Thread):
                                 self.name, task)
                             while db.get('status_' +
                                          task) is not status.STOPPED:
-                                sleep(1)
+                                await asyncio.sleep(1)
                         self.kstop()
                         if task_action is action.KILL:
                             self.is_alive = False
@@ -131,4 +130,4 @@ class Ktask(Thread):
                         db.set(self.status_key, status.STOPPED)
                         logging.info('Task [%s] has now stopped.', self.name)
             # All cases
-            sleep(self.period)
+            await asyncio.sleep(self.period)
