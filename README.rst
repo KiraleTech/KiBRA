@@ -253,6 +253,7 @@ You may want to configure keyboard and time zone:
 ::
 
  dpkg-reconfigure tzdata
+ dpkg-reconfigure ntp
  dpkg-reconfigure keyboard-configuration
  setupcon
 
@@ -301,3 +302,17 @@ Now it is possible to run the KiBRA application:
 ::
 
  python -m kibra
+
+USB Troubleshooting
+-------------------
+
+It might happen that the Dongle is not captured by the guest machine. 
+In this case, take a look to the `USB Basics and Troubleshooting 
+<https://forums.virtualbox.org/viewtopic.php?f=35&t=82639#p390402>`_ 
+post of the VirtualBox End User forums.
+ 
+Specially if USBcap is installed in your Windows host (alogn with Wireshark), 
+the procedure described `here 
+<https://forums.virtualbox.org/viewtopic.php?f=6&t=43541#p195973>`_ 
+might be useful to avoid USBCap taking control of the Dongle once it is released 
+from the host.
