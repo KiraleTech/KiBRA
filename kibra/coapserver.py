@@ -165,20 +165,11 @@ class Res_N_MR(resource.Resource):
                 timeout_tlv = ThreadTLV(
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout))
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
-                dst = db.get('all_network_bbrs')
-                # CoapClient().petition(dst, DEFS.PORT_BB, URI.B_BMR, payload, NON)
-                req = aiocoap.Message(
-                    mid=1234, code=Code.POST, mtype=Type.NON, payload=payload)
-                req.set_request_uri(
-                    uri='coap://[%s]:%u%s' % (dst, DEFS.PORT_BB, URI.B_BMR),
-                    set_uri_host=False)
-                #print(req.encode().hex())
-                sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 5)
-                #sock.bind(('::', 9876))
-                sock.sendto(req.encode(), (dst, DEFS.PORT_BB))
-                sock.close()
+                dst = '%s%%%s' % (db.get('all_network_bbrs'),
+                                  db.get('exterior_ifname'))
+                client = CoapClient()
+                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
+                client.stop()
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status])

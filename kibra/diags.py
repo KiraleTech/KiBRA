@@ -77,7 +77,7 @@ class DIAGS(Ktask):
         self.br_internet_access = 'online' if ping is 0 else 'offline'
         '''
         # Diags
-        response = await self.petitioner.request(
+        response = await self.petitioner.con_request(
             self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
         if not response:
             return
@@ -100,13 +100,13 @@ class DIAGS(Ktask):
             self.last_time = current_time
             self._parse_diags(response)
             # Network Data get
-            response = await self.petitioner.request(
+            response = await self.petitioner.con_request(
                 self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA)
             self._parse_net_data(response)
             # Active Data Set get
-            response = await self.petitioner.request(self.br_permanent_addr,
-                                                     DEFS.PORT_MM, URI.C_AG,
-                                                     PET_ACT_DATASET)
+            response = await self.petitioner.con_request(
+                self.br_permanent_addr, DEFS.PORT_MM, URI.C_AG,
+                PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
             for rloc16 in self.nodes_list:
@@ -115,7 +115,7 @@ class DIAGS(Ktask):
                 int_addr = int(
                     '%s000000fffe00%s' % (db.get('dongle_prefix'), rloc16), 16)
                 node_rloc = IPv6Address(int_addr).compressed
-                response = await self.petitioner.request(
+                response = await self.petitioner.con_request(
                     node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
                 if response:
                     response = ThreadTLV.sub_tlvs(response)
