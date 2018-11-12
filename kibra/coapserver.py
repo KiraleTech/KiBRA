@@ -101,9 +101,9 @@ class MulticastHandler():
 
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
-        for addr in self.maddrs:
-            if self.maddrs[addr] < now:
-                self.addr_remove(addr)
+        rem_list = [addr for addr, tout in self.maddrs.items() if tout < now]
+        for addr in rem_list:
+            self.addr_remove(addr)
 
 
 class Res_N_MR(resource.Resource):
