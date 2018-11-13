@@ -23,8 +23,6 @@ from pyroute2 import IPRoute
 # Global variables
 IP = IPRoute()
 MCAST_HNDLR = None
-MCPROXY_CONF = db.CFG_PATH + 'mcproxy.conf'
-
 
 class MulticastHandler():
     def __init__(self):
@@ -36,12 +34,8 @@ class MulticastHandler():
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
 
-        # Initialize mcproxy
-        with open(MCPROXY_CONF, 'w') as file_:
-            file_.write('protocol MLDv2;\n')
-            file_.write('pinstance %s: %s ==> %s;\n' %
-                        (db.get('dongle_name'), db.get('interior_ifname'),
-                         db.get('exterior_ifname')))
+        # Initialize smcroute
+        bash('smcroute -d')
 
     def reg_update(self, addrs, addr_tout):
         for addr in addrs:
@@ -59,43 +53,26 @@ class MulticastHandler():
             if addr_tout < DEFS.MIN_MLR_TIMEOUT:
                 addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
-        self.maddrs[str(addr)] = tout
 
-        # Update mcproxy configuration
-        if 'primary' in db.get('bbr_status'):
-            with open(MCPROXY_CONF, 'r+') as file_:
-                mcproxy_conf_lines = file_.readlines()
-                file_.seek(0)
-                file_.truncate()
-                for line in mcproxy_conf_lines:
-                    if str(addr) not in line:
-                        file_.write(line)
-                file_.write(
-                    'pinstance %s downstream %s in whitelist table {(%s | *)};\n'
-                    % (db.get('dongle_name'), db.get('exterior_ifname'),
-                       str(addr)))
-            # TODO: https://docs.python.org/3/library/asyncio-subprocess.html
-            #bash('nohup mcproxy -f %s &' % MCPROXY_CONF)
-            os.system('nohup mcproxy -f %s 2> /dev/null &' % MCPROXY_CONF)
+        # Update smcroute configuration
+        if str(addr) not in self.maddrs.keys():
+            bash('smcroutectl join %s %s' % (db.get('exterior_ifname'), addr))
+            bash('smcroutectl add %s :: %s %s' %
+                 (db.get('exterior_ifname'), addr, db.get('interior_ifname')))
+
+        # Save the new address in the volatile list
+        self.maddrs[str(addr)] = tout
 
         logging.info('Multicast address %s registration updated (+%d s)' %
                      (addr, addr_tout))
 
     def addr_remove(self, addr):
+        # Update smcroute configuration
+        bash('smcroutectl remove %s :: %s' % (db.get('exterior_ifname'), addr))
+        bash('smcroutectl leave %s %s' % (db.get('exterior_ifname'), addr))
+
         self.maddrs.pop(addr)
         # TODO: remove persistent
-
-        # Update mcproxy configuration
-        if 'primary' in db.get('bbr_status'):
-            with open(MCPROXY_CONF, 'r+') as file_:
-                mcproxy_conf_lines = file_.readlines()
-                file_.seek(0)
-                file_.truncate()
-                for line in mcproxy_conf_lines:
-                    if str(addr) not in line:
-                        file_.write(line + '\n')
-            #bash('nohup mcproxy -f %s &' % MCPROXY_CONF)
-            os.system('nohup mcproxy -f %s 2> /dev/null &' % MCPROXY_CONF)
 
         logging.info('Multicast address %s registration removed.' % addr)
 
@@ -261,6 +238,7 @@ class COAPSERVER(Ktask):
         self.server_mm.stop()
         self.server_mc.stop()
         self.server_bb.stop()
+        bash('smcroute -k')
         db.set('bbr_status', 'off')
 
     async def periodic(self):
