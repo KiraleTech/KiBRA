@@ -24,12 +24,13 @@ from pyroute2 import IPRoute
 IP = IPRoute()
 MCAST_HNDLR = None
 
+
 class MulticastHandler():
     def __init__(self):
         # Volatile multicast addresses list
         self.maddrs = {}
 
-        # Load permanent addresses
+        # Load presistent addresses
         maddrs_perm = db.get('maddrs_perm') or []
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
@@ -48,20 +49,24 @@ class MulticastHandler():
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xffffffff:
             tout = datetime.datetime.max
-            # TODO: persistent storage
+            # Save the address in the presistent list
+            maddrs_perm = db.get('maddrs_perm') or []
+            if addr not in maddrs_perm:
+                maddrs_perm.append(addr)
+                db.set('maddrs_perm', maddrs_perm)
         else:
             if addr_tout < DEFS.MIN_MLR_TIMEOUT:
                 addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
 
         # Update smcroute configuration
-        if str(addr) not in self.maddrs.keys():
+        if addr not in self.maddrs.keys():
             bash('smcroutectl join %s %s' % (db.get('exterior_ifname'), addr))
             bash('smcroutectl add %s :: %s %s' %
                  (db.get('exterior_ifname'), addr, db.get('interior_ifname')))
 
         # Save the new address in the volatile list
-        self.maddrs[str(addr)] = tout
+        self.maddrs[addr] = tout
 
         logging.info('Multicast address %s registration updated (+%d s)' %
                      (addr, addr_tout))
@@ -71,8 +76,13 @@ class MulticastHandler():
         bash('smcroutectl remove %s :: %s' % (db.get('exterior_ifname'), addr))
         bash('smcroutectl leave %s %s' % (db.get('exterior_ifname'), addr))
 
+        # Remove the address from the volatile list
         self.maddrs.pop(addr)
-        # TODO: remove persistent
+
+        # Remove the address from the presistent list
+        maddrs_perm = db.get('maddrs_perm') or []
+        maddrs_perm.pop(addr)
+        db.set('maddrs_perm', maddrs_perm)
 
         logging.info('Multicast address %s registration removed.' % addr)
 
