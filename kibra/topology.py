@@ -73,6 +73,7 @@ def _join_network(dev, role, oobcom):
         dev.ksh_cmd('clear')
         dev.wait_for('status', ['none'])
     dev.ksh_cmd('config outband')
+    dev.ksh_cmd('config legacy off')
     for key, param in oobcom.items():
         dev.ksh_cmd('config %s %s' % (key, param))
     dev.ksh_cmd('config seqguard 0')

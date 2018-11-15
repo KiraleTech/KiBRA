@@ -209,10 +209,6 @@ def _bagent_off():
     logging.info('Border agent has been disabled.')
 
 
-def add_mcaddr():
-    SERIAL_DEV.ksh_cmd('config ipaddr add ff0e::1234')
-
-
 class SERIAL(Ktask):
     def __init__(self):
         Ktask.__init__(

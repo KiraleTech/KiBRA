@@ -23,6 +23,7 @@ from pyroute2 import IPRoute
 # Global variables
 IP = IPRoute()
 MCAST_HNDLR = None
+MCPROXY_CONF = db.CFG_PATH + 'mcproxy.conf'
 
 
 class MulticastHandler():
@@ -35,8 +36,26 @@ class MulticastHandler():
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
 
-        # Initialize smcroute
-        bash('smcroute -d')
+    def __mcproxy_reload(self):
+        '''
+        Generates a configuration file for mcproxy includind all the registered
+        multicast addresses and instantiates it again with the new file
+        '''
+
+        with open(MCPROXY_CONF, 'w') as file_:
+            file_.write('protocol MLDv2;\n')
+            file_.write('pinstance %s: %s ==> %s;\n' %
+                        (db.get('dongle_name'), db.get('interior_ifname'),
+                         db.get('exterior_ifname')))
+            file_.write('table Allowed {\n')
+            for addr in self.maddrs.keys():
+                file_.write('  (%s | *)\n' % addr)
+            file_.write('};\n')
+            file_.write(
+                'pinstance %s downstream %s in whitelist table Allowed;\n' %
+                (db.get('dongle_name'), db.get('exterior_ifname')))
+
+        os.system('nohup mcproxy -f %s 2> /dev/null &' % MCPROXY_CONF)
 
     def reg_update(self, addrs, addr_tout):
         for addr in addrs:
@@ -59,30 +78,30 @@ class MulticastHandler():
                 addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
 
-        # Update smcroute configuration
-        if addr not in self.maddrs.keys():
-            bash('smcroutectl join %s %s' % (db.get('exterior_ifname'), addr))
-            bash('smcroutectl add %s :: %s %s' %
-                 (db.get('exterior_ifname'), addr, db.get('interior_ifname')))
-
         # Save the new address in the volatile list
         self.maddrs[addr] = tout
+
+        # Reload multicast proxy
+        if 'primary' in db.get('bbr_status'):
+            self.__mcproxy_reload()
 
         logging.info('Multicast address %s registration updated (+%d s)' %
                      (addr, addr_tout))
 
     def addr_remove(self, addr):
-        # Update smcroute configuration
-        bash('smcroutectl remove %s :: %s' % (db.get('exterior_ifname'), addr))
-        bash('smcroutectl leave %s %s' % (db.get('exterior_ifname'), addr))
 
         # Remove the address from the volatile list
         self.maddrs.pop(addr)
 
         # Remove the address from the presistent list
         maddrs_perm = db.get('maddrs_perm') or []
-        maddrs_perm.pop(addr)
-        db.set('maddrs_perm', maddrs_perm)
+        if addr in maddrs_perm:
+            maddrs_perm.pop(addr)
+            db.set('maddrs_perm', maddrs_perm)
+
+        # Reload multicast proxy
+        if 'primary' in db.get('bbr_status'):
+            self.__mcproxy_reload()
 
         logging.info('Multicast address %s registration removed.' % addr)
 
@@ -240,8 +259,6 @@ class COAPSERVER(Ktask):
             addr='::',
             port=DEFS.PORT_BB,
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())])
-        time.sleep(3)
-        KSH.add_mcaddr()
         # TODO: /n/dr
 
     def kstop(self):
