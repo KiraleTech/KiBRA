@@ -149,7 +149,7 @@ def _enable_br():
     THREAD_SERVICE_DATA_BBR = '01'
     BBR_DEF_SEQ_NUM = 0
     BBR_DEF_REREG_DELAY = 4*1000
-    BBR_DEF_MLR_TIMEOUT = 300
+    BBR_DEF_MLR_TIMEOUT = 3600
 
     # Build s_server_data
     bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
