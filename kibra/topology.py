@@ -106,7 +106,7 @@ def form_topology():
             device.set_mac(mac)
             # oobcom['actstamp'] = _get_atimestamp()
             threads.append(
-                Thread(target=_join_network, args=[device, 'reed', oobcom]))
+                Thread(target=_join_network, args=[device, 'fed', oobcom]))
     for thread in threads:
         thread.start()
     for thread in threads:
