@@ -36,34 +36,59 @@ class MulticastHandler():
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
 
+        # Initial mcproxy configuration
+        self.__mcproxy_reload()
+
     def __mcproxy_reload(self):
         '''
         Generates a configuration file for mcproxy includind all the registered
         multicast addresses and instantiates it again with the new file
         '''
+        return
+        if 'primary' not in db.get('bbr_status'):
+            return
 
         with open(MCPROXY_CONF, 'w') as file_:
             file_.write('protocol MLDv2;\n')
             file_.write('pinstance %s: %s ==> %s;\n' %
-                        (db.get('dongle_name'), db.get('interior_ifname'),
-                         db.get('exterior_ifname')))
-            file_.write('table Allowed {\n')
+                        (db.get('dongle_name'), db.get('exterior_ifname'),
+                         db.get('interior_ifname')))
+            # Allow incoming multicast
+            file_.write('table allowed {\n')
             for addr in self.maddrs.keys():
                 file_.write('  (%s | *)\n' % addr)
             file_.write('};\n')
             file_.write(
-                'pinstance %s downstream %s in whitelist table Allowed;\n' %
+                'pinstance %s upstream %s in whitelist table allowed;\n' %
                 (db.get('dongle_name'), db.get('exterior_ifname')))
+            file_.write(
+                'pinstance %s downstream %s out whitelist table allowed;\n' %
+                (db.get('dongle_name'), db.get('interior_ifname')))
+            # Allow outgoing multicast
+            file_.write(
+                'pinstance %s upstream %s out whitelist table {(* | *)};\n' %
+                (db.get('dongle_name'), db.get('exterior_ifname')))
+            file_.write(
+                'pinstance %s downstream %s in whitelist table {(* | *)};\n' %
+                (db.get('dongle_name'), db.get('interior_ifname')))
 
         os.system('nohup mcproxy -f %s 2> /dev/null &' % MCPROXY_CONF)
+        logging.info('Multicast forwarding has been reconfigured.')
 
     def reg_update(self, addrs, addr_tout):
+        old_addrs = list(self.maddrs.keys())
+
         for addr in addrs:
             if addr_tout > 0:
                 self.addr_add(str(addr), addr_tout)
             elif str(addr) in self.maddrs.keys():
                 self.addr_remove(str(addr))
         db.set('mlr_cache', str(self.maddrs))
+
+        # Reload multicast proxy
+        new_addrs = list(self.maddrs.keys())
+        if old_addrs != new_addrs:
+            self.__mcproxy_reload()
 
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xffffffff:
@@ -81,10 +106,6 @@ class MulticastHandler():
         # Save the new address in the volatile list
         self.maddrs[addr] = tout
 
-        # Reload multicast proxy
-        if 'primary' in db.get('bbr_status'):
-            self.__mcproxy_reload()
-
         logging.info('Multicast address %s registration updated (+%d s)' %
                      (addr, addr_tout))
 
@@ -99,17 +120,16 @@ class MulticastHandler():
             maddrs_perm.pop(addr)
             db.set('maddrs_perm', maddrs_perm)
 
-        # Reload multicast proxy
-        if 'primary' in db.get('bbr_status'):
-            self.__mcproxy_reload()
-
         logging.info('Multicast address %s registration removed.' % addr)
 
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
         rem_list = [addr for addr, tout in self.maddrs.items() if tout < now]
-        for addr in rem_list:
-            self.addr_remove(addr)
+        if rem_list:
+            for addr in rem_list:
+                self.addr_remove(addr)
+            # Reload multicast proxy
+            self.__mcproxy_reload()
 
 
 class Res_N_MR(resource.Resource):
@@ -127,11 +147,15 @@ class Res_N_MR(resource.Resource):
         addrs = []
         i = 0
         while i < tlv.length:
+            # Check for valid IPv6 address
             try:
                 addr = ipaddress.IPv6Address(bytes(tlv.value[i:i + 16]))
-                if addr.is_multicast and tlv.value[i + 1] & 0x0F > 3:
-                    addrs.append(addr)
             except:
+                return Res_N_MR.ST_INV_ADDR, []
+            # Check for valid multicast address with scope > 3
+            if addr.is_multicast and tlv.value[i + 1] & 0x0F > 3:
+                addrs.append(addr)
+            else:
                 return Res_N_MR.ST_INV_ADDR, []
             i += 16
         return Res_N_MR.ST_SUCESS, addrs
