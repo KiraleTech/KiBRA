@@ -44,7 +44,6 @@ class MulticastHandler():
         Generates a configuration file for mcproxy includind all the registered
         multicast addresses and instantiates it again with the new file
         '''
-        return
         if 'primary' not in db.get('bbr_status'):
             return
 
