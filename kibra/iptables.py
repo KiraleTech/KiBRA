@@ -10,6 +10,7 @@ from kibra.thread import DEFS
 def handle_ipv6(action):
     '''handle_ipv6('A')  --> Add the rules
     handle_ipv6('D')  --> Delete the rules'''
+
     if action is 'A':
         logging.info('Adding ip6tables general rules.')
         # This should not be needed if KiBRA was closed correctly
@@ -19,6 +20,11 @@ def handle_ipv6(action):
         logging.info('Deleting ip6tables general rules.')
     else:
         return
+
+    # Disallow incoming multicast ping requests
+    bash('ip6tables -w -t filter -' + action + ' INPUT -i ' +
+         db.get('exterior_ifname') +
+         ' -d ff00::/8 -p icmpv6 --icmpv6-type echo-request -j DROP')
 
     # Prevent fragmentation
     bash('ip6tables -w -t filter -' + action + ' OUTPUT -o ' +
@@ -86,9 +92,9 @@ def handle_ipv6(action):
          ' FORWARD -p udp -m state --state ESTABLISHED -j ACCEPT')
     bash('ip6tables -w -t filter -' + action +
          ' FORWARD -p icmpv6 -m state --state ESTABLISHED,RELATED -j ACCEPT')
-    # Forward multicast TODO: only for PBBR
+    # Forward multicast (filtering is made by mcrouter)
     bash('ip6tables -w -t mangle -' + action +
-         ' PREROUTING -d ff00::/8 -j TTL --ttl-inc 1')
+         ' PREROUTING -d ff00::/8 -j HL --hl-inc 1')
     # Block all other forwarding to the Thread interface
     if 'dhcp_pool' in db.CFG:
         bash('ip6tables -w -t filter -' + action + ' FORWARD -d ' +
