@@ -235,6 +235,7 @@ class COAPSERVER(Ktask):
         int_addr = int('ff320040' + db.get('dongle_prefix') + '00000003', 16)
         all_network_bbrs = ipaddress.IPv6Address(int_addr).compressed
         db.set('all_network_bbrs', all_network_bbrs)
+        MCAST_HNDLR.mcrouter.join_group(all_network_bbrs)
         # TODO: update it if dongle_prefix changes
 
         # Thread side server
@@ -247,18 +248,18 @@ class COAPSERVER(Ktask):
             addr='::',
             port=DEFS.PORT_MC,
             resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
-        # TODO: bind to all_network_bbrs
         self.server_bb = CoapServer(
-            addr='::',
+            addr=all_network_bbrs,
             port=DEFS.PORT_BB,
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())])
         # TODO: /n/dr
+        # TODO: /a/aq
 
     def kstop(self):
         self.server_mm.stop()
         self.server_mc.stop()
         self.server_bb.stop()
-        bash('smcroute -k')
+        MCAST_HNDLR.mcrouter.leave_group(all_network_bbrs)
         db.set('bbr_status', 'off')
 
     async def periodic(self):
