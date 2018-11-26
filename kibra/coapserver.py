@@ -3,27 +3,27 @@ import datetime
 import ipaddress
 import logging
 import os
-import socket
 import struct
 import time
 
 import aiocoap
 import aiocoap.resource as resource
-import kibra.database as db
-import kibra.ksh as KSH
 from aiocoap.numbers.codes import Code
 from aiocoap.numbers.types import Type
+from pyroute2 import IPRoute
+
+import kibra.database as db
+import kibra.ksh as KSH
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
+from kibra.mcrouter import MCRouter
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
-from pyroute2 import IPRoute
 
 # Global variables
 IP = IPRoute()
 MCAST_HNDLR = None
-MCPROXY_CONF = db.CFG_PATH + 'mcproxy.conf'
 
 
 class MulticastHandler():
@@ -35,48 +35,12 @@ class MulticastHandler():
         maddrs_perm = db.get('maddrs_perm') or []
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
+        
+        # Start the multicast routing daemon
+        self.mcrouter = MCRouter()
 
-        # Initial mcproxy configuration
-        self.__mcproxy_reload()
-
-    def __mcproxy_reload(self):
-        '''
-        Generates a configuration file for mcproxy includind all the registered
-        multicast addresses and instantiates it again with the new file
-        '''
-        if 'primary' not in db.get('bbr_status'):
-            return
-
-        with open(MCPROXY_CONF, 'w') as file_:
-            file_.write('protocol MLDv2;\n')
-            file_.write('pinstance %s: %s ==> %s;\n' %
-                        (db.get('dongle_name'), db.get('exterior_ifname'),
-                         db.get('interior_ifname')))
-            # Allow incoming multicast
-            file_.write('table allowed {\n')
-            for addr in self.maddrs.keys():
-                file_.write('  (%s | *)\n' % addr)
-            file_.write('};\n')
-            file_.write(
-                'pinstance %s upstream %s in whitelist table allowed;\n' %
-                (db.get('dongle_name'), db.get('exterior_ifname')))
-            file_.write(
-                'pinstance %s downstream %s out whitelist table allowed;\n' %
-                (db.get('dongle_name'), db.get('interior_ifname')))
-            # Allow outgoing multicast
-            file_.write(
-                'pinstance %s upstream %s out whitelist table {(* | *)};\n' %
-                (db.get('dongle_name'), db.get('exterior_ifname')))
-            file_.write(
-                'pinstance %s downstream %s in whitelist table {(* | *)};\n' %
-                (db.get('dongle_name'), db.get('interior_ifname')))
-
-        os.system('nohup mcproxy -f %s 2> /dev/null &' % MCPROXY_CONF)
-        logging.info('Multicast forwarding has been reconfigured.')
 
     def reg_update(self, addrs, addr_tout):
-        old_addrs = list(self.maddrs.keys())
-
         for addr in addrs:
             if addr_tout > 0:
                 self.addr_add(str(addr), addr_tout)
@@ -84,10 +48,6 @@ class MulticastHandler():
                 self.addr_remove(str(addr))
         db.set('mlr_cache', str(self.maddrs))
 
-        # Reload multicast proxy
-        new_addrs = list(self.maddrs.keys())
-        if old_addrs != new_addrs:
-            self.__mcproxy_reload()
 
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xffffffff:
@@ -101,6 +61,10 @@ class MulticastHandler():
             if addr_tout < DEFS.MIN_MLR_TIMEOUT:
                 addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
+        
+        # Join the multicast group in the external interface for MLDv2 handling
+        if addr not in self.maddrs.keys():
+            self.mcrouter.join_group(addr)
 
         # Save the new address in the volatile list
         self.maddrs[addr] = tout
@@ -118,6 +82,14 @@ class MulticastHandler():
         if addr in maddrs_perm:
             maddrs_perm.pop(addr)
             db.set('maddrs_perm', maddrs_perm)
+        
+        # Remove the existing multicast routes for this address
+        self.mcrouter.rem_group_routes(addr)
+
+        # Leave the multicast group
+        self.mcrouter.leave_group(addr)
+
+        # TODO: Leave the group in the Linux host
 
         logging.info('Multicast address %s registration removed.' % addr)
 
@@ -127,8 +99,6 @@ class MulticastHandler():
         if rem_list:
             for addr in rem_list:
                 self.addr_remove(addr)
-            # Reload multicast proxy
-            self.__mcproxy_reload()
 
 
 class Res_N_MR(resource.Resource):
