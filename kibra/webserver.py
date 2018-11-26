@@ -1,3 +1,4 @@
+import asyncio
 import http.server
 import json
 import logging
@@ -6,7 +7,6 @@ import socketserver
 import sys
 import time
 import xml.etree.ElementTree
-from threading import Thread
 
 import kibra.database as db
 from kibra.diags import DIAGS_DB
@@ -91,4 +91,4 @@ def start():
             httpd = socketserver.TCPServer(('', 80), WebServer)
         except OSError:
             time.sleep(1)
-    Thread(target=httpd.serve_forever, daemon=True).start()
+    asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
