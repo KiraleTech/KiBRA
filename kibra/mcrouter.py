@@ -1,15 +1,18 @@
-# https://www.freebsd.org/cgi/man.cgi?query=multicast&sektion=4&manpath=FreeBSD+5.2-RELEASE
+'''
+Multicast routing based on sockets and kernel signals
+# https://www.freebsd.org/cgi/man.cgi?query=multicast&apropos=0&sektion=4
 # https://github.com/torvalds/linux/blob/v4.18/include/uapi/linux/mroute6.h
 # https://github.com/torvalds/linux/blob/v4.18/include/uapi/linux/in.h
 # https://github.com/torvalds/linux/blob/master/include/uapi/linux/in6.h
+'''
 
 import asyncio
 import datetime
 import ipaddress
 import json
 import logging
-import struct
 import socket
+import struct
 import time
 
 import kibra.database as db
@@ -127,6 +130,7 @@ class MCRouter():
             if type_ != MRT6MSG_NOCACHE:
                 continue
 
+            # Packet from Backbone Network (9.4.7.3)
             if in_mif == EXT_MIF:
                 # Filter by registered multicast groups
                 if not db.get('mlr_cache'):
@@ -136,10 +140,16 @@ class MCRouter():
                 if str(dst_addr) not in maddrs:
                     continue
                 out_mif = INT_MIF
+            # Packet from Thread Network (9.4.7.4)
             elif in_mif == INT_MIF:
+                # Rules 1-3 handled by KiNOS
                 # Filter by forwarding flags
-                # TODO
-                if dst[1] & 0x0f < 5:
+                dst_scope = dst[1] & 0x0f
+                out_fwd = db.get('mcast_out_fwd')
+                admin_fwd = db.get('mcast_admin_fwd')
+                if out_fwd == 0:
+                    continue
+                if dst_scope == 4 and admin_fwd == 0:
                     continue
                 out_mif = EXT_MIF
             else:
