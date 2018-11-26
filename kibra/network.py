@@ -18,7 +18,7 @@ IP = IPRoute()
 
 def _global_netconfig():
     if not db.has_keys(['exterior_ifname']):
-        db.set('exterior_ifname', _get_ext_ifname())
+        _set_ext_iface()
         logging.info('External interface is %s.', db.get('exterior_ifname'))
     if not db.has_keys(['prefix']):
         logging.info('Trying to obtain a prefix via Prefix Delegation...')
@@ -75,18 +75,15 @@ def get_addr(ifname, family):
     '''
 
 
-def _get_ext_ifname():
+def _set_ext_iface():
     '''Return the name of the interface with the default IPv4 route'''
     def_routes = IP.get_default_routes(AF_INET)
     if not def_routes:
         raise Exception('No external interfaces found.')
     index = def_routes[0].get_attr('RTA_OIF')
-    return IP.get_links(index)[0].get_attr('IFLA_IFNAME')
-    # Old:
-    # Return the name of the first active interface found
-    # for link in IP.get_links():
-    #     if 'UP' in link.get_attr('IFLA_OPERSTATE'):
-    #         return link.get_attr('IFLA_IFNAME')
+    links = IP.get_links(index)
+    db.set('exterior_ifname', links[0].get_attr('IFLA_IFNAME'))
+    db.set('exterior_ifnumber', links[0]['index'])
 
 
 def dongle_conf():
