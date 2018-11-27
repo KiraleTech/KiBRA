@@ -124,7 +124,7 @@ class MCRouter():
             # Debug
             src_addr = ipaddress.IPv6Address(src).compressed
             dst_addr = ipaddress.IPv6Address(dst).compressed
-            print('Upcall: type=%d mif=%d src=%s dst=%s' %
+            logging.debug('Upcall: type=%d mif=%d src=%s dst=%s' %
                   (type_, in_mif, src_addr, dst_addr))
 
             if type_ != MRT6MSG_NOCACHE:
@@ -145,11 +145,9 @@ class MCRouter():
                 # Rules 1-3 handled by KiNOS
                 # Filter by forwarding flags
                 dst_scope = dst[1] & 0x0f
-                out_fwd = db.get('mcast_out_fwd')
-                admin_fwd = db.get('mcast_admin_fwd')
-                if out_fwd == 0:
+                if db.get('mcast_out_fwd') == 0:
                     continue
-                if dst_scope == 4 and admin_fwd == 0:
+                if dst_scope == 4 and db.get('mcast_admin_fwd') == 0:
                     continue
                 out_mif = EXT_MIF
             else:
@@ -171,6 +169,7 @@ class MCRouter():
 
         # If the route existed, there is no need to add it to the kernel
         if old_route:
+            # Remove it because it's going to be added with updated timeout
             self.mcroutes.pop(old_route)
         else:
             self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_ADD_MFC,
