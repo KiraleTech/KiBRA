@@ -223,8 +223,9 @@ class COAPSERVER(Ktask):
             self,
             name='coapserver',
             start_keys=['dongle_rloc', 'dongle_prefix'],
+            stop_keys=['all_network_bbrs'],
             start_tasks=['serial', 'network', 'diags'],
-            stop_tasks=['network'],
+            stop_tasks=[],
             period=5)
 
     def kstart(self):
@@ -254,12 +255,13 @@ class COAPSERVER(Ktask):
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())])
         # TODO: /n/dr
         # TODO: /a/aq
+        # TODO: /a/an
 
     def kstop(self):
         self.server_mm.stop()
         self.server_mc.stop()
         self.server_bb.stop()
-        MCAST_HNDLR.mcrouter.leave_group(all_network_bbrs)
+        MCAST_HNDLR.mcrouter.leave_group(db.get('all_network_bbrs'))
         db.set('bbr_status', 'off')
 
     async def periodic(self):
