@@ -55,7 +55,7 @@ def _enable_ecm():
 
 def _dongle_apply_config():
     # Config network parameters
-    SERIAL_DEV.ksh_cmd('config legacy off') # Enable Thread 1.2
+    SERIAL_DEV.ksh_cmd('config legacy off')  # Enable Thread 1.2
     if 'dongle_channel' in db.CFG:
         logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
         SERIAL_DEV.ksh_cmd('config channel %s' % db.get('dongle_channel'))
@@ -141,37 +141,62 @@ def _dongle_get_config():
 
 
 def _enable_br():
-    '''Enable CDC ETH traffic and announce prefix'''
+    '''Enable CDC ETH traffic'''
     SERIAL_DEV.ksh_cmd('config brouter on')
     logging.info('Border router has been enabled.')
 
+
+def bbr_dataset_update():
+    '''
+    Update Thread BBR Service Data
+    Automatically increases the sequence number
+    '''
     THREAD_ENTERPRISE_NUMBER = 44970
     THREAD_SERVICE_DATA_BBR = '01'
+    THREAD_SERVICE_DATA_FMT = '!BHI'
     BBR_DEF_SEQ_NUM = 0
-    BBR_DEF_REREG_DELAY = 4*1000
+    BBR_DEF_REREG_DELAY = 4
     BBR_DEF_MLR_TIMEOUT = 3600
 
+    # Increase sequence number
+    try:
+        bbr_sequence_number = int(db.get('bbr_seq'))
+    except:
+        bbr_sequence_number = BBR_DEF_SEQ_NUM
+    bbr_sequence_number = (bbr_sequence_number + 1) % 0xff
+
     # Build s_server_data
-    bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
-    registration_delay = db.get('rereg_delay') or BBR_DEF_REREG_DELAY
-    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLR_TIMEOUT
-    s_server_data = struct.pack('!BII', bbr_sequence_number,
-                                registration_delay, mlr_timeout)
+    try:
+        reregistration_delay = int(db.get('rereg_delay'))
+    except:
+        reregistration_delay = BBR_DEF_REREG_DELAY
+    try:
+        mlr_timeout = int(db.get('mlr_timeout'))
+    except:
+        mlr_timeout = BBR_DEF_MLR_TIMEOUT
+
+    s_server_data = struct.pack(THREAD_SERVICE_DATA_FMT, bbr_sequence_number,
+                                reregistration_delay, mlr_timeout)
+
+    # Store used values
+    db.set('bbr_seq', bbr_sequence_number)
+    db.set('rereg_delay', reregistration_delay)
+    db.set('mlr_timeout', mlr_timeout)
 
     # Enable BBR
     SERIAL_DEV.ksh_cmd('config service add %u %s %s' %
                        (THREAD_ENTERPRISE_NUMBER, THREAD_SERVICE_DATA_BBR,
                         bytes(s_server_data).hex()))
-    logging.info('BBR has been enabled.')
+    logging.info('BBR update: Seq. = %d MLR Timeout = %d, Rereg. Delay = %d' %
+                 (bbr_sequence_number, mlr_timeout, reregistration_delay))
 
 
 def dhcp_on():
     ''''Announce DHCP prefix'''
     prefix = db.get('dhcp_pool')
-    pool = prefix.split('/')[0]
-    length = prefix.split('/')[1]
+    pool, length = prefix.split('/')
     # Flags: dhcp, stable (no on-mesh), DNS
-    SERIAL_DEV.ksh_cmd('config prefix add ' + pool + ' ' + length + ' 0x0B01')
+    SERIAL_DEV.ksh_cmd('config prefix add %s %s 0x0B01' % (pool, length))
     logging.info('Prefix %s/%s has been announced to the Thread network.',
                  pool, length)
 
@@ -224,6 +249,7 @@ class SERIAL(Ktask):
         _configure()
         _dongle_get_config()
         _enable_br()
+        bbr_dataset_update()
         # _bagent_on()
 
     def kstop(self):
