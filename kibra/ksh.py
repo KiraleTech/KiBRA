@@ -159,22 +159,12 @@ def bbr_dataset_update():
     BBR_DEF_MLR_TIMEOUT = 3600
 
     # Increase sequence number
-    try:
-        bbr_sequence_number = int(db.get('bbr_seq'))
-    except:
-        bbr_sequence_number = BBR_DEF_SEQ_NUM
+    bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
     bbr_sequence_number = (bbr_sequence_number + 1) % 0xff
 
     # Build s_server_data
-    try:
-        reregistration_delay = int(db.get('rereg_delay'))
-    except:
-        reregistration_delay = BBR_DEF_REREG_DELAY
-    try:
-        mlr_timeout = int(db.get('mlr_timeout'))
-    except:
-        mlr_timeout = BBR_DEF_MLR_TIMEOUT
-
+    reregistration_delay = db.get('rereg_delay') or BBR_DEF_REREG_DELAY
+    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLR_TIMEOUT
     s_server_data = struct.pack(THREAD_SERVICE_DATA_FMT, bbr_sequence_number,
                                 reregistration_delay, mlr_timeout)
 

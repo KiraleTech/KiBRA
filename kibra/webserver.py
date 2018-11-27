@@ -16,28 +16,6 @@ from kibra.ksh import bbr_dataset_update
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
-KNONW_KEYS = [
-    "action_coapserver", "action_dhcp", "action_diags", "action_dns",
-    "action_mdns", "action_nat", "action_network", "action_serial",
-    "autostart", "bagent_at", "bagent_cm", "bagent_port", "bbr_seq",
-    "bbr_status", "bridging_mark", "bridging_table", "dhcp_pool",
-    "dongle_channel", "dongle_commcred", "dongle_eid", "dongle_ll",
-    "dongle_mac", "dongle_name", "dongle_netname", "dongle_panid",
-    "dongle_prefix", "dongle_rloc", "dongle_role", "dongle_serial",
-    "dongle_status", "dongle_xpanid", "exterior_ifname", "exterior_ifnumber",
-    "exterior_ipv4", "exterior_port_mc", "interior_ifname",
-    "interior_ifnumber", "interior_mac", "mcast_admin_fwd", "mlr_timeout",
-    "pool4", "prefix", "rereg_delay", "serial_device", "status_coapserver",
-    "status_dhcp", "status_diags", "status_dns", "status_mdns", "status_nat",
-    "status_network", "status_serial"
-]
-
-MODIF_KEYS = [
-    "action_coapserver", "action_dhcp", "action_diags", "action_dns",
-    "action_mdns", "action_nat", "action_network", "action_serial",
-    "autostart", "mlr_timeout", "rereg_delay"
-]
-
 
 def _get_leases():
     leases = {}
@@ -75,15 +53,17 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('/api'):
             req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             for key in req.keys():
-                if not key in MODIF_KEYS:
+                if not key in db.modifiable_keys():
                     self.send_response(http.HTTPStatus.BAD_REQUEST)
                     return
             # Apply incoming changes
+            modif_keys = set()
             for key, value in req.items():
-                db.set(key, value[0])
+                if str(db.get(key)) != value[0]:
+                    db.set(key, value[0])
+                    modif_keys.add(key)
             # Special actions
-            if not set(["mlr_timeout", "rereg_delay"]).isdisjoint(
-                    set(req.keys())):
+            if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
                 bbr_dataset_update()
             data = 'OK'
         elif self.path == '/db/cfg':

@@ -14,21 +14,91 @@ CFG_USER = {}
 
 MUTEX = RLock()
 
+DB_ITEMS_TYPE = 0
+DB_ITEMS_DEF = 1
+DB_ITEMS_VALID = 2
+DB_ITEMS_WRITE = 3
+# TODO: change DB_ITEMS_WRITE for a callback to be used after changing the value
+DB_ITEMS = {
+    'action_coapserver': [str, None, lambda x: True, True],
+    'action_dhcp': [str, None, lambda x: True, True],
+    'action_diags': [str, None, lambda x: True, True],
+    'action_dns': [str, None, lambda x: True, True],
+    'action_mdns': [str, None, lambda x: True, True],
+    'action_nat': [str, None, lambda x: True, True],
+    'action_network': [str, None, lambda x: True, True],
+    'action_serial': [str, None, lambda x: True, True],
+    'autostart': [int, 0, lambda x: x in (0, 1), True],
+    'bagent_at': [str, None, lambda x: True, False],
+    'bagent_cm': [int, None, lambda x: True, False],
+    'bagent_port': [int, None, lambda x: True, False],
+    'bbr_seq': [int, 0, lambda x: x >= 0 and x < 0xff, False],
+    'bbr_status': [str, None, lambda x: True, False],
+    'bridging_mark': [int, None, lambda x: True, False],
+    'bridging_table': [str, None, lambda x: True, False],
+    'dhcp_pool': [str, None, lambda x: True, False],
+    'dongle_channel': [int, None, lambda x: True, False],
+    'dongle_commcred': [str, None, lambda x: True, False],
+    'dongle_eid': [str, None, lambda x: True, False],
+    'dongle_ll': [str, None, lambda x: True, False],
+    'dongle_mac': [str, None, lambda x: True, False],
+    'dongle_name': [str, None, lambda x: True, False],
+    'dongle_netname': [str, None, lambda x: True, False],
+    'dongle_panid': [str, None, lambda x: True, False],
+    'dongle_prefix': [str, None, lambda x: True, False],
+    'dongle_rloc': [str, None, lambda x: True, False],
+    'dongle_role': [str, None, lambda x: True, False],
+    'dongle_serial': [str, None, lambda x: True, False],
+    'dongle_status': [str, None, lambda x: True, False],
+    'dongle_xpanid': [str, None, lambda x: True, False],
+    'exterior_ifname': [str, None, lambda x: True, False],
+    'exterior_ifnumber': [int, None, lambda x: True, False],
+    'exterior_ipv4': [str, None, lambda x: True, False],
+    'exterior_port_mc': [int, None, lambda x: True, False],
+    'interior_ifname': [str, None, lambda x: True, False],
+    'interior_ifnumber': [int, None, lambda x: True, False],
+    'interior_mac': [str, None, lambda x: True, False],
+    'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), False],
+    'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), False],
+    'mlr_timeout': [int, 3600, lambda x: x >= 300 and x < 0xffffffff, True],
+    'pool4': [str, None, lambda x: True, False],
+    'prefix': [str, None, lambda x: True, False],
+    'rereg_delay': [int, 5, lambda x: x >= 1 and x < 0xffff, True],
+    'serial_device': [str, None, lambda x: True, False],
+    'status_coapserver': [str, None, lambda x: True, False],
+    'status_dhcp': [str, None, lambda x: True, False],
+    'status_diags': [str, None, lambda x: True, False],
+    'status_dns': [str, None, lambda x: True, False],
+    'status_mdns': [str, None, lambda x: True, False],
+    'status_nat': [str, None, lambda x: True, False],
+    'status_network': [str, None, lambda x: True, False],
+    'status_serial': [str, None, lambda x: True, False],
+}
+
+
+def modifiable_keys():
+    return [x for x in DB_ITEMS.keys() if DB_ITEMS[x][DB_ITEMS_WRITE]]
+
 
 def get(key):
     with MUTEX:
         if key not in CFG:
             return None
         else:
-            return CFG[key]
+            value = CFG[key]
+            if DB_ITEMS[key][DB_ITEMS_TYPE] is int:
+                return int(value)
+            return value
 
 
 def set(key, value):
+    value = str(value)
     with MUTEX:
-        # Only save to disk if value has changed
+        # Only save if value has changed
         if key not in CFG or CFG[key] is not value:
             CFG[key] = value
             logging.debug('Saving %s as %s.', key, value)
+
 
 def delete(key):
     '''Delete the database element if it exists'''
@@ -36,6 +106,7 @@ def delete(key):
         del CFG[key]
     except KeyError:
         pass
+
 
 def has_keys(key_list):
     ''' Return True if all keys exist in CFG'''
