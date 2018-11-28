@@ -4,10 +4,10 @@ from time import sleep
 import kitools
 
 import kibra.database as db
-from kibra.shell import bash
+import kibra.ksh as KSH
 from kibra.ktask import Ktask
-from kibra.ksh import dhcp_off, dhcp_on
-from kibra.network import dongle_route_enable, dongle_route_disable
+from kibra.network import dongle_route_disable, dongle_route_enable
+from kibra.shell import bash
 
 DHCP_CONFIG = '/etc/dibbler/server.conf'
 DHCP_DAEMON = 'dibbler-server'
@@ -70,11 +70,25 @@ class DHCP(Ktask):
         # Start DHCP daemon
         bash(DHCP_DAEMON + ' start')
         # Announce prefix in the Thread network
-        dhcp_on()
+        KSH.prefix_handle(
+            'prefix',
+            'add',
+            db.get('dhcp_pool'),
+            stable=True,
+            on_mesh=True,
+            dhcp=True,
+            default=True)
 
     def kstop(self):
         # Remove prefix from the Thread network# Announce prefix in the Thread network
-        dhcp_off()
+        KSH.prefix_handle(
+            'prefix',
+            'remove',
+            db.get('dhcp_pool'),
+            stable=True,
+            on_mesh=True,
+            dhcp=True,
+            default=True)
         # Stop DHCP daemon
         bash(DHCP_DAEMON + ' stop')
         # Remove previous configuration for this dongle

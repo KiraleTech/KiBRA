@@ -181,37 +181,69 @@ def bbr_dataset_update():
                  (bbr_sequence_number, mlr_timeout, reregistration_delay))
 
 
-def dhcp_on():
-    ''''Announce DHCP prefix'''
-    prefix = db.get('dhcp_pool')
+def prefix_handle(
+        type_: str,  # 'prefix' or 'route'
+        action: str,  # 'add' or 'remove'
+        prefix: str,  # 'prefix/length'
+        stable=False,
+        on_mesh=False,
+        preferred=False,
+        slaac=False,
+        dhcp=False,
+        configure=False,
+        default=False,
+        preference='medium',
+        nd_dns=False,
+        dp=False):
+    '''
+    5.18.3 Border Router TLV, 16 bits of flags:
+    0 - Reserved --> Used by Kirale command to indicate Stable
+    1 - Reserved
+    2 - Reserved
+    3 - Reserved
+    4 - Reserved
+    5 - Reserved
+    6 - DP
+    7 - ND DNS
+    8 - On Mesh
+    9 - Default
+    10 - Configure
+    11 - DHCP
+    12 - SLAAC
+    13 - Preferred
+    14 - Preference
+    15 - Preference
+    '''
+    flags = 0x0000
+    if stable:
+        flags |= 1 << 0
+    if on_mesh:
+        flags |= 1 << 8
+    if preferred:
+        flags |= 1 << 13
+    if slaac:
+        flags |= 1 << 12
+    if dhcp:
+        flags |= 1 << 11
+    if configure:
+        flags |= 1 << 10
+    if default:
+        flags |= 1 << 9
+    if nd_dns:
+        flags |= 1 << 7
+    if dp and not slaac:
+        flags |= 1 << 6
+    if preference == 'high':
+        flags |= 1 << 14
+    elif preference == 'low':
+        flags |= 3 << 14
+
+    flags = '0x' + str(hex(flags).replace('0x', '').zfill(4))
     pool, length = prefix.split('/')
-    # Flags: dhcp, stable (no on-mesh), DNS
-    SERIAL_DEV.ksh_cmd('config prefix add %s %s 0x0B01' % (pool, length))
-    logging.info('Prefix %s/%s has been announced to the Thread network.',
-                 pool, length)
 
-
-def dhcp_off():
-    prefix = db.get('dhcp_pool')
-    pool = prefix.split('/')[0]
-    length = prefix.split('/')[1]
-    SERIAL_DEV.ksh_cmd('config prefix remove ' + pool + ' ' + length +
-                       ' 0x0B01')
-    logging.info('Prefix %s/%s has been removed from the Thread network.',
-                 pool, length)
-
-
-def nat_on():
-    # Flags: stable (no on-mesh)
-    SERIAL_DEV.ksh_cmd('config route add 64:ff9b:: 96 0x0001')
-    logging.info(
-        'Prefix 64:ff9b::/96 has been announced to the Thread network.')
-
-
-def nat_off():
-    SERIAL_DEV.ksh_cmd('config route remove 64:ff9b:: 96 0x0001')
-    logging.info(
-        'Prefix 64:ff9b::/96 has been removed from the Thread network.')
+    SERIAL_DEV.ksh_cmd(
+        'config %s %s %s %s %s' % (type_, action, pool, length, flags))
+    logging.info('Config %s %s %s/%s', type_, action, pool, length)
 
 
 def _bagent_on():

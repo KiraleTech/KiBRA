@@ -2,9 +2,9 @@ import logging
 import re
 
 import kibra.database as db
+import kibra.ksh as KSH
 from kibra.shell import bash
 from kibra.ktask import Ktask, status
-from kibra.ksh import nat_off, nat_on
 
 
 class NAT(Ktask):
@@ -32,10 +32,10 @@ class NAT(Ktask):
             logging.info('%s used as stateful NAT64 masking address.',
                          db.get('exterior_ipv4'))
         bash('jool --enable')
-        nat_on()
+        KSH.prefix_handle('route', 'add', '64:ff9b::/96', stable=True)
 
     def kstop(self):
-        nat_off()
+        KSH.prefix_handle('route', 'remove', '64:ff9b::/96', stable=True)
         bash('/sbin/modprobe jool disabled')
         if db.has_keys(['exterior_ipv4']):
             bash('jool --pool4 --remove --udp %s 10000-30000' %

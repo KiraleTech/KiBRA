@@ -52,6 +52,7 @@ DB_ITEMS = {
     'dongle_serial': [str, None, lambda x: True, False],
     'dongle_status': [str, None, lambda x: True, False],
     'dongle_xpanid': [str, None, lambda x: True, False],
+    'dua_prefix': [str, None, lambda x: True, False],
     'exterior_ifname': [str, None, lambda x: True, False],
     'exterior_ifnumber': [int, None, lambda x: True, False],
     'exterior_ipv4': [str, None, lambda x: True, False],
@@ -59,6 +60,7 @@ DB_ITEMS = {
     'interior_ifname': [str, None, lambda x: True, False],
     'interior_ifnumber': [int, None, lambda x: True, False],
     'interior_mac': [str, None, lambda x: True, False],
+    'maddrs_perm': [str, None, lambda x: True, False],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), False],
     'mlr_timeout': [int, 3600, lambda x: x >= 300 and x < 0xffffffff, True],
@@ -82,6 +84,8 @@ def modifiable_keys():
 
 
 def get(key):
+    if not key in DB_ITEMS.keys():
+        raise Exception('Trying to use a non existing DB entry key (%s).' % key)
     with MUTEX:
         if key not in CFG:
             return None
