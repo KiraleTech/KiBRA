@@ -14,6 +14,7 @@ from pyroute2 import IPRoute
 
 import kibra.database as db
 import kibra.ksh as KSH
+import kibra.network as NETWORK
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
 from kibra.mcrouter import MCRouter
@@ -26,6 +27,27 @@ IP = IPRoute()
 MCAST_HNDLR = None
 
 
+class DMStatus():
+    # Defined statuses
+    ST_SUCESS = 0
+    ST_INV_ADDR = 2
+    ST_DUP_ADDR = 3
+    ST_RES_SHRT = 4
+    ST_NOT_PRI = 5
+    ST_UNSPEC = 6
+
+
+class DUAEntry():
+    def __init__(self, eid, dua):
+        self.eid = eid
+        self.dua = dua
+        self.reg_time = datetime.datetime.now().timestamp()
+        self.dad_run = False
+
+    def update(self):
+        self.reg_time = datetime.datetime.now().timestamp()
+
+
 class MulticastHandler():
     def __init__(self):
         # Volatile multicast addresses list
@@ -35,10 +57,9 @@ class MulticastHandler():
         maddrs_perm = db.get('maddrs_perm') or []
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
-        
+
         # Start the multicast routing daemon
         self.mcrouter = MCRouter()
-
 
     def reg_update(self, addrs, addr_tout):
         for addr in addrs:
@@ -47,7 +68,6 @@ class MulticastHandler():
             elif str(addr) in self.maddrs.keys():
                 self.addr_remove(str(addr))
         db.set('mlr_cache', str(self.maddrs))
-
 
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xffffffff:
@@ -61,7 +81,7 @@ class MulticastHandler():
             if addr_tout < DEFS.MIN_MLR_TIMEOUT:
                 addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
-        
+
         # Join the multicast group in the external interface for MLDv2 handling
         if addr not in self.maddrs.keys():
             self.mcrouter.join_group(addr)
@@ -82,7 +102,7 @@ class MulticastHandler():
         if addr in maddrs_perm:
             maddrs_perm.pop(addr)
             db.set('maddrs_perm', maddrs_perm)
-        
+
         # Remove the existing multicast routes for this address
         self.mcrouter.rem_group_routes(addr)
 
@@ -104,13 +124,6 @@ class MulticastHandler():
 class Res_N_MR(resource.Resource):
     '''Multicast registration, Thread 1.2 5.24'''
 
-    # Defined statuses
-    ST_SUCESS = 0
-    ST_INV_ADDR = 2
-    ST_RES_SHRT = 4
-    ST_NOT_PRI = 5
-    ST_UNSPEC = 6
-
     @staticmethod
     def _parse_addrs(tlv):
         addrs = []
@@ -120,17 +133,17 @@ class Res_N_MR(resource.Resource):
             try:
                 addr = ipaddress.IPv6Address(bytes(tlv.value[i:i + 16]))
             except:
-                return Res_N_MR.ST_INV_ADDR, []
+                return DMStatus.ST_INV_ADDR, []
             # Check for valid multicast address with scope > 3
             if addr.is_multicast and tlv.value[i + 1] & 0x0F > 3:
                 addrs.append(addr)
             else:
-                return Res_N_MR.ST_INV_ADDR, []
+                return DMStatus.ST_INV_ADDR, []
             i += 16
-        return Res_N_MR.ST_SUCESS, addrs
+        return DMStatus.ST_SUCESS, addrs
 
     async def render_post(self, request):
-        status = Res_N_MR.ST_UNSPEC
+        status = DMStatus.ST_UNSPEC
 
         # Incoming TLVs parsing
         in_pload = ThreadTLV(data=request.payload)
@@ -138,7 +151,7 @@ class Res_N_MR(resource.Resource):
 
         # BBR Primary/Secondary status
         if 'primary' not in db.get('bbr_status'):
-            status = Res_N_MR.ST_NOT_PRI
+            status = DMStatus.ST_NOT_PRI
         else:
             addrs = []
             timeout = None
@@ -175,6 +188,73 @@ class Res_N_MR(resource.Resource):
         code = Code.CHANGED
         payload = out_pload.array()
         logging.info('%s rsp: %s' % (URI.N_MR, out_pload))
+        return aiocoap.Message(code=code, payload=payload)
+
+
+class DUAHandler():
+    def __init__(self):
+        # DUA registrations list
+        self.entries = []
+
+    def reg_update(self, eid, dua):
+        old_entry = None
+        for entry in self.entries:
+            if entry.dua == dua:
+                old_entry = entry
+                if entry.eid != eid:
+                    logging.info(
+                        'EID %s tried to register the DUA %s, already registered by EID %s',
+                        eid, dua, entry.eid)
+                    return False
+        if old_entry:
+            old_entry.update()
+        else:
+            self.entries.append(DUAEntry(eid, dua))
+            # TODO: DAD
+        # TODO: PRO_BB
+        logging.info('EID %s registration update for DUA %s', eid, dua)
+
+class Res_N_DR(resource.Resource):
+    '''DUA registration, Thread 1.2 5.23'''
+
+    async def render_post(self, request):
+        status = DMStatus.ST_UNSPEC
+
+        # Incoming TLVs parsing
+        in_pload = ThreadTLV(data=request.payload)
+        logging.info('%s req: %s' % (URI.N_DR, in_pload))
+
+        # BBR Primary/Secondary status
+        if 'primary' not in db.get('bbr_status'):
+            status = DMStatus.ST_NOT_PRI
+        else:
+            dua = None
+            eid = None
+
+            for tlv in ThreadTLV.sub_tlvs(request.payload):
+                if tlv.type is TLV.A_ML_EID and tlv.length == 8:
+                    eid = tlv.value.hex()
+                elif tlv.type is TLV.A_TARGET_EID:
+                    try:
+                        req_dua = bytes(tlv.value)
+                        dua = ipaddress.IPv6Address(req_dua)
+                    except:
+                        status = DMStatus.ST_INV_ADDR
+
+            if eid and dua:
+                if DUA_HNDLR.reg_update(eid, dua):
+                    status = DMStatus.ST_SUCESS
+                else:
+                    # Duplication detected, resource shortage not contemplated
+                    status = DMStatus.ST_DUP_ADDR
+
+        # Fill and return the response
+        out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status])
+        if req_dua:
+            out_pload += ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=req_dua)
+        code = Code.CHANGED
+        payload = out_pload.array()
+        logging.info('%s rsp: %s' % (URI.N_DR, out_pload))
         return aiocoap.Message(code=code, payload=payload)
 
 
@@ -229,9 +309,11 @@ class COAPSERVER(Ktask):
             period=5)
 
     def kstart(self):
+        global DUA_HNDLR
         global MCAST_HNDLR
+        DUA_HNDLR = DUAHandler()
         MCAST_HNDLR = MulticastHandler()
-        
+
         if not db.get('bbr_port'):
             db.set('bbr_port', DEFS.PORT_BB)
 
@@ -247,7 +329,8 @@ class COAPSERVER(Ktask):
         self.server_mm = CoapServer(
             addr='::',
             port=DEFS.PORT_MM,
-            resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
+            resources=[(URI.tuple(URI.N_DR), Res_N_DR(), (URI.tuple(URI.N_MR),
+                                                          Res_N_MR()))])
         self.server_mc = CoapServer(
             addr='::',
             port=DEFS.PORT_MC,
@@ -256,9 +339,18 @@ class COAPSERVER(Ktask):
             addr=all_network_bbrs,
             port=db.get('bbr_port'),
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())])
-        # TODO: /n/dr
         # TODO: /a/aq
         # TODO: /a/an
+        dua_prefix = db.get('dua_prefix')
+        if dua_prefix:
+            KSH.prefix_handle(
+                'prefix',
+                'add',
+                dua_prefix,
+                stable=True,
+                on_mesh=True,
+                dp=True)
+            NETWORK.dongle_route_enable(dua_prefix)
 
     def kstop(self):
         self.server_mm.stop()
@@ -266,6 +358,16 @@ class COAPSERVER(Ktask):
         self.server_bb.stop()
         MCAST_HNDLR.mcrouter.leave_group(db.get('all_network_bbrs'))
         db.set('bbr_status', 'off')
+        dua_prefix = db.get('dua_prefix')
+        if dua_prefix:
+            KSH.prefix_handle(
+                'prefix',
+                'remove',
+                dua_prefix,
+                stable=True,
+                on_mesh=True,
+                dp=True)
+            NETWORK.dongle_route_disable(dua_prefix)
 
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()
