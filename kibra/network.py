@@ -290,11 +290,21 @@ def _ifdown():
 
 
 def dongle_route_enable(prefix):
-    bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+    IP.route(
+        'replace',
+        family=AF_INET6,
+        dst=prefix,
+        oif=db.get('interior_ifnumber'))
+    #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
 
 
 def dongle_route_disable(prefix):
-    bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+    IP.route(
+        'del',
+        family=AF_INET6,
+        dst=prefix,
+        oif=db.get('interior_ifnumber'))
+    #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
 
 
 class NETWORK(Ktask):
