@@ -157,6 +157,7 @@ class URI():
     D_DG = '/d/dg'
     C_AG = '/c/ag'
     N_MR = '/n/mr'
+    N_DR = '/n/dr'
     B_BMR = '/b/bmr'
 
     @staticmethod
