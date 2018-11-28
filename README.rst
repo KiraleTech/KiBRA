@@ -32,8 +32,9 @@ Features
 - NTP client and server, advertised to the Thread network in the DHCP options.
 - Stateful NAT64 (`Jool <https://www.jool.mx/>`_) autoconfguration.
 - DNS64 server (`Unbound <http://www.unbound.net/>`_).
-- mDNS (`Avahi <https://www.avahi.org/>`_) advertisement of MeshCoP Border
-  Agent service in the exterior network, with support for external commissioner.
+- mDNS (`Python Zeroconf <https://github.com/jstasiak/python-zeroconf>`_) 
+  advertisement of MeshCoP Border Agent service in the exterior network, with 
+  support for external commissioner.
 - Thread network real-time supervision with Thread Management Framework using a
   CoAP client (`aiocoap <https://www.avahi.org/>`_).
 - Web based dynamic network visualization.
@@ -59,12 +60,11 @@ and makes use of several PyPI modules, apart from the `KiTools
 Debian Buster and Raspbian Buster systems, but it will probably run correctly
 in many other GNU/Linux distributions.
 
-The required system packages are: ``avahi-daemon`` (from v0.7),
-``dibbler-server``, ``iproute2``, ``ip6tables``, ``jool``, ``ntp`` and
-``unbound``.
+The required system packages are: ``dibbler-server``, ``iproute2``,
+``ip6tables``, ``jool``, ``ntp`` and ``unbound``.
 
 The required Python modules are: ``aiocoap``, ``bash``, ``kitools``,
-``pycryptodomex`` and ``pyroute2``.
+``pycryptodomex``, ``pyroute2`` and ``zeroconf``.
 
 Installation
 ============

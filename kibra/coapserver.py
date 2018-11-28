@@ -231,6 +231,9 @@ class COAPSERVER(Ktask):
     def kstart(self):
         global MCAST_HNDLR
         MCAST_HNDLR = MulticastHandler()
+        
+        if not db.get('bbr_port'):
+            db.set('bbr_port', DEFS.PORT_BB)
 
         # Set All Network BBRs multicast address as per 9.4.8.1
         int_addr = int('ff320040' + db.get('dongle_prefix') + '00000003', 16)
@@ -251,7 +254,7 @@ class COAPSERVER(Ktask):
             resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
         self.server_bb = CoapServer(
             addr=all_network_bbrs,
-            port=DEFS.PORT_BB,
+            port=db.get('bbr_port'),
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())])
         # TODO: /n/dr
         # TODO: /a/aq

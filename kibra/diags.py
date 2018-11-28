@@ -300,7 +300,6 @@ class DIAGS(Ktask):
                                 logging.info('Setting this BBR as Primary')
                             db.set('bbr_status', 'primary')
                             return
-        # TODO: stop mcproxy when passing from primary to secondary
         if 'secondary' not in db.get('bbr_status'):
             logging.info('Setting this BBR as Secondary')
         db.set('bbr_status', 'secondary')

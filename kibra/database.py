@@ -32,6 +32,7 @@ DB_ITEMS = {
     'bagent_at': [str, None, lambda x: True, False],
     'bagent_cm': [int, None, lambda x: True, False],
     'bagent_port': [int, None, lambda x: True, False],
+    'bbr_port': [int, 5683, lambda x: x >= 0 and x < 0xffff, False],
     'bbr_seq': [int, 0, lambda x: x >= 0 and x < 0xff, False],
     'bbr_status': [str, None, lambda x: True, False],
     'bridging_mark': [int, None, lambda x: True, False],

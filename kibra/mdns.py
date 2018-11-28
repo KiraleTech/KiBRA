@@ -66,29 +66,8 @@ class MDNS(Ktask):
             period=5)
 
     def kstart(self):
-        self.mdns = zeroconf.Zeroconf(interfaces=db.get('exterior_ifname'))
-        logging.info('Adding mDNS service.')
-        props = {
-            'rv': '1',
-            'tv': '1.2.0',
-            'sb': bytes([0, 0, 0, 0x82]),
-            'nn': db.get('dongle_netname'),
-            'xp': bytes.fromhex(db.get('dongle_xpanid').replace('0x', '')),
-            'vn': VENDOR_NAME,
-            'mn': DEVICE_NAME,
-            'sq': struct.pack('!I', db.get('bbr_seq')),
-            'bb': struct.pack('!H', db.get('bbr_port')),
-        }
-        type_ = '_meshcop._udp.local.'
-        name = '%s %s %s' % (db.get('dongle_name'), VENDOR_NAME, DEVICE_NAME)
-        self.service = zeroconf.ServiceInfo(
-            type_=type_,
-            name='%s.%s' % (name, type_),
-            # TODO: Support for IPv6 backbone
-            address=socket.inet_aton(db.get('exterior_ipv4')),
-            port=db.get('exterior_port_mc'),
-            properties=props)
-        self.mdns.register_service(self.service)
+        self.mdns = zeroconf.Zeroconf()
+        self.service = None
 
         # Enable NAT
         logging.info('Enabling Border Agent NAT.')
@@ -103,3 +82,40 @@ class MDNS(Ktask):
         logging.info('Removing mDNS service.')
         self.mdns.unregister_service(self.service)
         self.mdns.close()
+
+    async def periodic(self):
+        self.service_update()
+
+    def service_update(self):
+        props = {
+            'rv': '1',
+            'tv': '1.2.0',
+            'sb': bytes([0, 0, 0, 0x82]),
+            'nn': db.get('dongle_netname'),
+            'xp': bytes.fromhex(db.get('dongle_xpanid').replace('0x', '')),
+            'vn': VENDOR_NAME,
+            'mn': DEVICE_NAME,
+            'sq': struct.pack('!I', db.get('bbr_seq')),
+            'bb': struct.pack('!H', db.get('bbr_port')),
+        }
+
+        if self.service:
+            if props == self.service.properties:
+                # Don't continue if nothing changed
+                return
+            else:
+                # Remove previously announced service before adding it again
+                self.mdns.unregister_service(self.service)
+
+        # Announce the service with the new data
+        type_ = '_meshcop._udp.local.'
+        name = '%s %s %s' % (db.get('dongle_name'), VENDOR_NAME, DEVICE_NAME)
+        self.service = zeroconf.ServiceInfo(
+            type_=type_,
+            name='%s.%s' % (name, type_),
+            # TODO: Support for IPv6 backbone
+            address=socket.inet_aton(db.get('exterior_ipv4')),
+            port=db.get('exterior_port_mc'),
+            properties=props)
+        self.mdns.register_service(self.service)
+        logging.info('mDNS service updated.')

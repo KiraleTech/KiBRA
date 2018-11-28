@@ -54,7 +54,7 @@ setup(
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         'kitools', 'bash', 'pyroute2', 'python-iptables', 'aiocoap',
-        'pycryptodomex'
+        'pycryptodomex', 'zeroconf'
     ],
     entry_points={'console_scripts': ['kibra = kibra.__main__:main']},
 )
