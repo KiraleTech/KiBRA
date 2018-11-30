@@ -13,8 +13,7 @@ class NAT(Ktask):
             self,
             name='nat',
             start_keys=[
-                'exterior_ifname', 'exterior_ipv4', 'exterior_port_mc',
-                'pool4', 'dongle_prefix'
+                'exterior_ifname', 'exterior_ipv4', 'exterior_port_mc', 'pool4'
             ],
             stop_keys=['exterior_ipv4'],
             start_tasks=['serial'],
