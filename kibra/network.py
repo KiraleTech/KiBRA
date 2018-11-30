@@ -1,19 +1,37 @@
 import ipaddress
 import logging
+import struct
 from socket import AF_INET, AF_INET6
-from struct import pack, unpack
 from time import time
+
 from Cryptodome.Hash import SHA256
 from pyroute2 import IPRoute  # http://docs.pyroute2.org/iproute.html#api
 
 import kibra.database as db
 import kibra.iptables as iptables
-from kibra.shell import bash
 from kibra.ktask import Ktask
+from kibra.shell import bash
 
 DHCLIENT6_LEASES_FILE = '/var/lib/dhcp/dhclient6.leases'
 BR_TABLE_NR = 200
 IP = IPRoute()
+
+
+def get_prefix_based_mcast(prefix, groupid):
+    '''RFC 3306'''
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    maddr_bytes = bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack(
+        '>I', groupid)
+    return ipaddress.IPv6Address(maddr_bytes).compressed
+
+
+def get_rloc_from_short(prefix, rloc16):
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    rloc_bytes = prefix_bytes[0:8] + bytes.fromhex(
+        '000000fffe00') + struct.pack('>H', rloc16)
+    return ipaddress.IPv6Address(rloc_bytes).compressed
 
 
 def _global_netconfig():
@@ -33,7 +51,8 @@ def _global_netconfig():
 def _get_ula():
     '''Generate a GUA as RFC4193'''
     # https://tools.ietf.org/html/rfc4193#section-3.2.2
-    ntp_time = str(unpack('Q', pack('d', time()))[0])  # Time in hexadecimal
+    # Time in hexadecimal
+    ntp_time = str(struct.unpack('Q', struct.pack('d', time()))[0])
     eui64 = db.get('dongle_serial').split('+')[-1]  # EUI64
     sha = SHA256.new((ntp_time + eui64).encode()).hexdigest().zfill(
         40)  # SHA1 of Time + EUI64
@@ -300,10 +319,7 @@ def dongle_route_enable(prefix):
 
 def dongle_route_disable(prefix):
     IP.route(
-        'del',
-        family=AF_INET6,
-        dst=prefix,
-        oif=db.get('interior_ifnumber'))
+        'del', family=AF_INET6, dst=prefix, oif=db.get('interior_ifnumber'))
     #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
 
 

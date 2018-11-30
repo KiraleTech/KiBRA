@@ -2,9 +2,10 @@ import asyncio
 import copy
 import logging
 import time
-from ipaddress import IPv6Address
+import ipaddress
 
 import kibra.database as db
+import kibra.network as NETWORK
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
 from kibra.shell import bash
@@ -53,7 +54,7 @@ class DIAGS(Ktask):
         self.last_time = 0
 
     def kstart(self):
-        ll_addr = IPv6Address(db.get('dongle_ll')).compressed
+        ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
         self.br_permanent_addr = '%s%%%s' % (ll_addr,
                                              db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
@@ -112,9 +113,8 @@ class DIAGS(Ktask):
             for rloc16 in self.nodes_list:
                 if rloc16 == self.br_rloc16:
                     continue
-                int_addr = int(
-                    '%s000000fffe00%s' % (db.get('dongle_prefix'), rloc16), 16)
-                node_rloc = IPv6Address(int_addr).compressed
+                node_rloc = NETWORK.get_rloc_from_short(
+                    db.get('dongle_prefix'), rloc16)
                 response = await self.petitioner.con_request(
                     node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
                 if response:
@@ -174,7 +174,7 @@ class DIAGS(Ktask):
                     tlv.value[i:i + 16] for i in range(0, tlv.length, 16)
                 ]
                 for addr in addresses:
-                    str_addr = IPv6Address(
+                    str_addr = ipaddress.IPv6Address(
                         int.from_bytes(addr, byteorder='big')).compressed
                     json_node_info['addresses'].append(str_addr)
 
@@ -270,8 +270,9 @@ class DIAGS(Ktask):
                     db.set('dongle_netname',
                            ''.join('%c' % byte for byte in tlv.value))
                 if tlv.type is TLV.C_NETWORK_MESH_LOCAL_PREFIX:
-                    db.set('dongle_prefix',
-                           ''.join('%02x' % byte for byte in tlv.value))
+                    prefix_bytes = bytes(tlv.value) + bytes(8)
+                    prefix_addr = ipaddress.IPv6Address(prefix_bytes)
+                    db.set('dongle_prefix', prefix_addr.compressed + '/64')
                 if tlv.type is TLV.C_ACTIVE_TIMESTAMP:
                     db.set('bagent_at',
                            ''.join('%02x' % byte for byte in tlv.value))
@@ -294,7 +295,8 @@ class DIAGS(Ktask):
                     '''BBR is primary if there is only one Server TLV in the
                     BBR Dataset and the RLOC16 is the same as ours'''
                     if len(server_tlvs) == 1:
-                        node_rloc = IPv6Address(db.get('dongle_rloc')).packed
+                        node_rloc = ipaddress.IPv6Address(
+                            db.get('dongle_rloc')).packed
                         if node_rloc[14:16] == server_tlvs[0].value[0:2]:
                             if 'primary' not in db.get('bbr_status'):
                                 logging.info('Setting this BBR as Primary')
