@@ -28,6 +28,8 @@ DB_ITEMS = {
     'action_nat': [str, None, lambda x: True, True],
     'action_network': [str, None, lambda x: True, True],
     'action_serial': [str, None, lambda x: True, True],
+    'all_domain_bbrs': [str, None, lambda x: True, True],
+    'all_network_bbrs': [str, None, lambda x: True, True],
     'autostart': [int, 0, lambda x: x in (0, 1), True],
     'bagent_at': [str, None, lambda x: True, False],
     'bagent_cm': [int, None, lambda x: True, False],
