@@ -51,3 +51,12 @@ class ThreadTLV():
             tlvs.append(ThreadTLV(data[:size]))
             data = data[size:]
         return tlvs
+    
+    @staticmethod
+    def sub_tlvs_str(payload):
+        sub_tlvs = ThreadTLV.sub_tlvs(payload)
+        result = ''
+        for tlv in sub_tlvs:
+            result += '{ %s } ' % tlv
+        return result
+
