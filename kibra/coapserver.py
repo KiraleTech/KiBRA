@@ -242,13 +242,14 @@ class DUAHandler():
         await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
         client.stop()
 
-    async def send_bb_ans(self, mode, dst, dua, rloc16=None):
-        # Find the ML-EID that registered this DUA
-        eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
+    async def send_bb_ans(self, mode, dst, dua, eid=None, rloc16=None):
+        if eid is None:
+            # Find the ML-EID that registered this DUA
+            eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
 
-        # Don't send if DAD is still going
-        if eid is None or dad is not False:
-            return
+            # Don't send if DAD is still going
+            if eid is None or dad is not False:
+                return
 
         # Fill TLVs
         # Target EID TLV
@@ -447,7 +448,8 @@ class Res_B_BQ(resource.Resource):
             return aiocoap.message.NoResponse
 
         # Send BB.ans to the requester
-        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(aiocoap.CON, request.remote.sockaddr[0], dua, rloc16))
+        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(aiocoap.CON, 
+            request.remote.sockaddr[0], dua, rloc16))
 
         return aiocoap.message.NoResponse
 
@@ -502,8 +504,11 @@ class Res_B_BA(resource.Resource):
                 # Send ADDR_ERR.ntf
                 asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
         else:
-            # TODO: send ADDR_NTF.ans
-            pass
+            # Send ADDR_NTF.ans
+            dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
+            bbr_rloc16 = ipaddress.IPv6Address(db.get('dongle_rloc')).packed[-2:]
+            asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
+                aiocoap.NON, dst, entry.dua, eid, bbr_rloc16))
 
         return aiocoap.message.NoResponse
 
