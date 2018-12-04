@@ -111,8 +111,6 @@ class MulticastHandler():
         # Leave the multicast group
         self.mcrouter.join_leave_group('leave', addr)
 
-        # TODO: Leave the group in the Linux host
-
         logging.info('Multicast address %s registration removed.' % addr)
 
     def reg_periodic(self):
@@ -508,7 +506,7 @@ class Res_B_BA(resource.Resource):
             dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
             bbr_rloc16 = ipaddress.IPv6Address(db.get('dongle_rloc')).packed[-2:]
             asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
-                aiocoap.NON, dst, entry.dua, eid, bbr_rloc16))
+                aiocoap.CON, dst, dua, eid, bbr_rloc16))
 
         return aiocoap.message.NoResponse
 
