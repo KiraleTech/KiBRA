@@ -159,6 +159,10 @@ class URI():
     N_MR = '/n/mr'
     N_DR = '/n/dr'
     B_BMR = '/b/bmr'
+    B_BQ = '/b/bq'
+    B_BA = '/b/ba'
+    A_AQ = '/a/aq'
+    A_AN = '/a/an'
 
     @staticmethod
     def tuple(uri):
@@ -172,3 +176,5 @@ class DEFS():
     PORT_MM = 61631
     PORT_BB = 5683
     MIN_MLR_TIMEOUT = 300
+    DUA_DAD_QUERY_TIMEOUT = 1
+    DUA_DAD_REPEAT = 3
