@@ -273,12 +273,21 @@ class DUAHandler():
         logging.info(
             'out %s ans: %s' % (URI.B_BA, ThreadTLV.sub_tlvs_str(payload)))
         client = CoapClient()
-        # TODO: must be CON for link-local dst
         if mode == aiocoap.CON:
             await client.con_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
         else:
             await client.non_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
         client.stop()
+    
+    def remove_entry(self, entry=None, dua=None):
+        if not entry:
+            for entry_ in self.entries:
+                if dua == entry_.dua:
+                    entry = entry_
+        if not entry_:
+            return
+        logging.info('DUA %s with EID %s has been removed' % (entry.dua, entry.eid))
+        self.entries.remove(entry)
 
     async def perform_dad(self, entry):
         # Send BB.qry DUA_DAD_REPEAT times
@@ -286,10 +295,10 @@ class DUAHandler():
             await self.send_bb_query(entry.dua)
             await asyncio.sleep(DEFS.DUA_DAD_QUERY_TIMEOUT)
 
-            # Finsih process if duplication was detected
+            # Finsih process if duplication was detected meanwhile
             if not entry.dad:
                 logging.info('DUA %s was duplicated, removing...' % entry.dua)
-                self.entries.remove(entry)
+                self.remove_entry(entry)
                 return
 
         # Set DAD flag as finished
@@ -317,6 +326,8 @@ class DUAHandler():
 
         # Send PRO_BB.ntf (9.4.8.4.4)
         asyncio.ensure_future(DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'), entry.dua))
+
+        # TODO: save entries to database
 
 
 class Res_N_DR(resource.Resource):
@@ -470,6 +481,7 @@ class Res_B_BA(resource.Resource):
             else:
                 # Duplication detected!
                 DUA_HNDLR.duplicated_found(dua)
+                # TODO: send ADDR_ERR.ntf
         else:
             # TODO: send ADDR_NTF.ans
             pass
@@ -518,6 +530,41 @@ class Res_A_AQ(resource.Resource):
 
         return aiocoap.message.NoResponse
 
+
+class Res_A_AE(resource.Resource):
+    '''Address Error, Thread 1.2 5.23.3.9'''
+
+    async def render_post(self, request):
+        # Incoming TLVs parsing
+        logging.info(
+            'in %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(request.payload)))
+
+        # Message not handled by Secondary BBR
+        if not 'primary' in db.get('bbr_status'):
+            return aiocoap.message.NoResponse
+
+        # Find sub TLVs
+        dua = None
+        eid = None
+        for tlv in ThreadTLV.sub_tlvs(request.payload):
+            if tlv.type is TLV.A_TARGET_EID and tlv.length == 16:
+                dua = ipaddress.IPv6Address(bytes(tlv.value))
+            if tlv.type is TLV.A_ML_EID and tlv.length == 8:
+                eid = tlv.value.hex()
+        if not dua or not eid:
+            return aiocoap.message.NoResponse
+
+        # Don't process notifications for different prefixes than DUA
+        dua_prefix = ipaddress.IPv6Address(db.get('dua_prefix').split('/')[0])
+        if dua.packed[:8] != dua_prefix.packed[:8]:
+            return aiocoap.message.NoResponse
+
+        # Remove entry if it's registered with different EID
+        entry_eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
+        if not dad and entry_eid != eid:
+            DUA_HNDLR.remove_entry(dua=dua)
+
+        return aiocoap.message.NoResponse
 
 class CoapServer():
     '''CoAP Server'''
@@ -570,7 +617,8 @@ class COAPSERVER(Ktask):
             # TODO: enable radvd
 
             # Listen for CoAP in Realm-Local All-Routers multicast address
-            MCAST_HNDLR.mcrouter.join_leave_group('join', 'ff03::2', db.get('interior_ifnumber'))
+            MCAST_HNDLR.mcrouter.join_leave_group('join', 'ff03::2',
+                db.get('interior_ifnumber'))
 
         # Thread side server
         self.server_mm = CoapServer(
@@ -579,7 +627,8 @@ class COAPSERVER(Ktask):
             port=DEFS.PORT_MM,
             resources=[(URI.tuple(URI.N_DR), Res_N_DR()),
                        (URI.tuple(URI.N_MR), Res_N_MR()),
-                       (URI.tuple(URI.A_AQ), Res_A_AQ())])
+                       (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                       (URI.tuple(URI.A_AE), Res_A_AE())])
         self.server_mc = CoapServer(
             # TODO: bind to both RLOC and LL
             addr='::',

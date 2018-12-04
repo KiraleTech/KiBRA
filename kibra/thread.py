@@ -163,6 +163,7 @@ class URI():
     B_BA = '/b/ba'
     A_AQ = '/a/aq'
     A_AN = '/a/an'
+    A_AE = '/a/ae'
 
     @staticmethod
     def tuple(uri):
