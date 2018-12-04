@@ -279,6 +279,22 @@ class DUAHandler():
             await client.non_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
         client.stop()
     
+    async def send_addr_err(self, dua, eid_iid, dst_iid):
+        'Thread 1.2 5.23.3.6.4'
+        dua_bytes = ipaddress.IPv6Address(dua).packed
+        payload = ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=dua_bytes).array()
+        payload += ThreadTLV(t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
+
+        prefix_bytes = ipaddress.IPv6Address(db.get('dongle_prefix').split('/')[0]).packed
+        dst = ipaddress.IPv6Address(prefix_bytes[0:8] + bytes.fromhex(dst_iid))
+
+        logging.info(
+            'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
+
+        client = CoapClient()
+        await client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE, payload)
+        client.stop()
+    
     def remove_entry(self, entry=None, dua=None):
         if not entry:
             for entry_ in self.entries:
@@ -286,7 +302,8 @@ class DUAHandler():
                     entry = entry_
         if not entry_:
             return
-        logging.info('DUA %s with EID %s has been removed' % (entry.dua, entry.eid))
+        logging.info('DUA %s with EID %s has been removed' % (
+            entry.dua, entry.eid))
         self.entries.remove(entry)
 
     async def perform_dad(self, entry):
@@ -325,7 +342,8 @@ class DUAHandler():
         '''
 
         # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'), entry.dua))
+        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
+            aiocoap.NON, db.get('all_domain_bbrs'), entry.dua))
 
         # TODO: save entries to database
 
@@ -474,14 +492,15 @@ class Res_B_BA(resource.Resource):
         # See if its response to DAD or ADDR_QRY
         if not rloc16:
             # Check if DAD is pending
-            eid, _, dad = DUA_HNDLR.find_eid(dua)
-            if eid is None or dad is not True:
+            entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
+            if entry_eid is None or dad is not True:
                 # Not expecting an answer for this DUA
                 return
             else:
                 # Duplication detected!
                 DUA_HNDLR.duplicated_found(dua)
-                # TODO: send ADDR_ERR.ntf
+                # Send ADDR_ERR.ntf
+                asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
         else:
             # TODO: send ADDR_NTF.ans
             pass
