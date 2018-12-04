@@ -140,11 +140,13 @@ class MCRouter():
                 if str(dst_addr) not in maddrs:
                     continue
                 out_mif = INT_MIF
-            # Packet from Thread Network (9.4.7.4)
+            # Packet from Thread Network (9.4.7.3)
             elif in_mif == INT_MIF:
-                # Rules 1-3 handled by KiNOS
+                # Rules 1 and 3 handled by KiNOS
                 # Filter by forwarding flags
                 dst_scope = dst[1] & 0x0f
+                if dst_scope < 4:
+                    continue
                 if db.get('mcast_out_fwd') == 0:
                     continue
                 if dst_scope == 4 and db.get('mcast_admin_fwd') == 0:
@@ -208,14 +210,14 @@ class MCRouter():
                                       old_route.get_mf6cctl())
             logging.info('Route removed: %s' % old_route)
 
-    def join_group(self, mcgroup):
-        '''Join a multicast group on the exterior interface to handle MLDv2'''
-
+    def join_leave_group(self, action, mcgroup, ifnumber=None):
+        '''Join or leave a multicast group'''
+        if action == 'join':
+            action_ = IPV6_JOIN_GROUP
+        else:
+            action_ = IPV6_LEAVE_GROUP
         mcgroup = ipaddress.IPv6Address(mcgroup).packed
-        msg = struct.pack('16sI', mcgroup, db.get('exterior_ifnumber'))
-        self.mc6g_sock.setsockopt(IPPROTO_IPV6, IPV6_JOIN_GROUP, msg)
-
-    def leave_group(self, mcgroup):
-        mcgroup = ipaddress.IPv6Address(mcgroup).packed
-        msg = struct.pack('16sI', mcgroup, db.get('exterior_ifnumber'))
-        self.mc6g_sock.setsockopt(IPPROTO_IPV6, IPV6_LEAVE_GROUP, msg)
+        if ifnumber is None:
+            ifnumber = db.get('exterior_ifnumber')
+        msg = struct.pack('16sI', mcgroup, ifnumber)
+        self.mc6g_sock.setsockopt(IPPROTO_IPV6, action_, msg)
