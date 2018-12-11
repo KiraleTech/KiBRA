@@ -172,6 +172,8 @@ def bbr_dataset_update():
     db.set('bbr_seq', bbr_sequence_number)
     db.set('rereg_delay', reregistration_delay)
     db.set('mlr_timeout', mlr_timeout)
+    # Make them persistent
+    db.save()
 
     # Enable BBR
     SERIAL_DEV.ksh_cmd('config service add %u %s %s' %
