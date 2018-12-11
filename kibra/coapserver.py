@@ -17,6 +17,7 @@ from aiocoap.numbers.types import Type
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
 from kibra.mcrouter import MCRouter
+from kibra.ndproxy import NDProxy
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
@@ -196,6 +197,9 @@ class DUAHandler():
         # DUA registrations list
         self.entries = []
 
+        # Start the ND Proxy daemon
+        self.ndproxy = NDProxy()
+
     def reg_update(self, eid, dua, elapsed):
         old_entry = None
         for entry in self.entries:
@@ -299,10 +303,11 @@ class DUAHandler():
             for entry_ in self.entries:
                 if dua == entry_.dua:
                     entry = entry_
-        if not entry_:
+        if not entry:
             return
         logging.info('DUA %s with EID %s has been removed' % (
             entry.dua, entry.eid))
+        self.ndproxy.add_del_dua('del', entry.dua)
         self.entries.remove(entry)
 
     async def perform_dad(self, entry):
@@ -333,12 +338,11 @@ class DUAHandler():
                 entry.dad = False
 
     def announce(self, entry):
-        # TODO: add ND Proxy neighbor and send NA
-        '''
-        bash('ip -6 neigh add proxy %s dev %s' %
-                (dua, db.get('interior_ifname')))
-        NETWORK.dongle_route_enable(dua)
-        '''
+        # Add ND Proxy neighbor
+        self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
+
+        # Send unsolicited NA
+        self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
 
         # Send PRO_BB.ntf (9.4.8.4.4)
         asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
@@ -372,7 +376,7 @@ class Res_N_DR(resource.Resource):
                 elif tlv.type is TLV.A_TARGET_EID:
                     try:
                         req_dua = bytes(tlv.value)
-                        dua = ipaddress.IPv6Address(req_dua)
+                        dua = ipaddress.IPv6Address(req_dua).compressed
                     except:
                         status = DMStatus.ST_INV_ADDR
                 elif tlv.type is TLV.A_TIME_SINCE_LAST_TRANSACTION and tlv.length == 4:
@@ -671,6 +675,7 @@ class COAPSERVER(Ktask):
                 dua_prefix,
                 stable=True,
                 on_mesh=True,
+                default=True,
                 dp=True)
 
     def kstop(self):
@@ -687,6 +692,7 @@ class COAPSERVER(Ktask):
                 dua_prefix,
                 stable=True,
                 on_mesh=True,
+                default=True,
                 dp=True)
             MCAST_HNDLR.mcrouter.join_leave_group('leave', db.get('all_domain_bbrs'))
             MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2', db.get('interior_ifnumber'))

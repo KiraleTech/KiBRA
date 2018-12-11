@@ -69,14 +69,20 @@ def _get_prefix(exterior_ifname):
         logging.info('Obtained global prefix %s', prefix)
         return prefix
 
+def get_eui48(ifnumber):
+    '''Get EUI48 address for the interface'''
+    eui64 = IP.link('get', index=ifnumber)[0].get_attr('IFLA_ADDRESS')
+    return eui64
 
-def get_addr(ifname, family):
-    '''Get and address for the interface'''
-    # Find configured address
+def get_addrs(ifname, family, scope=None):
+    '''Get an address for the interface'''
+    # Find configured addresses
     idx = IP.link_lookup(ifname=ifname)[0]
-    raw_addrs = IP.get_addr(family=family, scope=0, index=idx)
-    if raw_addrs:
-        return raw_addrs[0].get_attr('IFA_ADDRESS')
+    addrs = []
+    for addr in IP.get_addr(index=idx, family=family, scope=scope):
+        addrs.append(addr.get_attr('IFA_ADDRESS'))
+    return addrs
+
     '''
     # No configured address found, try DHCP
     if family == AF_INET:
@@ -110,11 +116,11 @@ def dongle_conf():
     # Find exterior interface and prefix
     _global_netconfig()
     # Detect exterior interface addresses
-    ipv4 = get_addr(db.get('exterior_ifname'), AF_INET)
+    ipv4 = get_addrs(db.get('exterior_ifname'), AF_INET, 0)[0]
     if ipv4:
         logging.info('Using %s as exterior IPv4 address.', ipv4)
         db.set('exterior_ipv4', ipv4)
-    # ipv6 = get_addr(db.get('exterior_ifname'), AF_INET6)
+    # ipv6 = get_addrs(db.get('exterior_ifname'), AF_INET6, 0)[0]
     ipv6 = None
     if ipv6:
         logging.info('Using %s as exterior IPv6 address.', ipv6)
