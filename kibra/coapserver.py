@@ -126,17 +126,17 @@ class Res_N_MR(resource.Resource):
     '''Multicast registration, Thread 1.2 5.24'''
 
     @staticmethod
-    def _parse_addrs(tlv):
+    def _parse_addrs(payload):
         addrs = []
         i = 0
-        while i < tlv.length:
+        while i < len(payload):
             # Check for valid IPv6 address
             try:
-                addr = ipaddress.IPv6Address(bytes(tlv.value[i:i + 16]))
+                addr = ipaddress.IPv6Address(bytes(payload[i:i + 16]))
             except:
                 return DMStatus.ST_INV_ADDR, []
             # Check for valid multicast address with scope > 3
-            if addr.is_multicast and tlv.value[i + 1] & 0x0F > 3:
+            if addr.is_multicast and payload[i + 1] & 0x0F > 3:
                 addrs.append(addr)
             else:
                 return DMStatus.ST_INV_ADDR, []
@@ -158,14 +158,17 @@ class Res_N_MR(resource.Resource):
             timeout = None
             comm_sid = None
 
-            for tlv in ThreadTLV.sub_tlvs(request.payload):
-                if tlv.type is TLV.A_IPV6_ADDRESSES and tlv.length % 16 is 0:
-                    ipv6_addressses_tlv = tlv
-                    status, addrs = Res_N_MR._parse_addrs(tlv)
-                elif tlv.type is TLV.A_TIMEOUT and tlv.length == 4:
-                    timeout = tlv.value
-                elif tlv.type is TLV.A_COMMISSIONER_SESSION_ID and tlv.length == 2:
-                    comm_sid = tlv.value
+            # IPv6 Addresses TLV
+            addrs_value = ThreadTLV.get_value(request.payload,
+                                              TLV.A_IPV6_ADDRESSES)
+            status, addrs = Res_N_MR._parse_addrs(addrs_value)
+
+            # Timeout TLV
+            timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
+
+            # Commissioner Session ID TLV
+            comm_sid = ThreadTLV.get_value(request.payload,
+                                           TLV.A_COMMISSIONER_SESSION_ID)
 
             # Register valid addresses
             if addrs:
@@ -175,6 +178,8 @@ class Res_N_MR(resource.Resource):
                     addr_tout = db.get('mlr_timeout') or DEFS.MIN_MLR_TIMEOUT
                 MCAST_HNDLR.reg_update(addrs, addr_tout)
                 # Send BMLR.ntf
+                ipv6_addressses_tlv = ThreadTLV(
+                    t=TLV.A_IPV6_ADDRESSES, l=len(addrs_value), v=addrs_value)
                 timeout_tlv = ThreadTLV(
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout))
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
@@ -281,23 +286,26 @@ class DUAHandler():
         else:
             await client.non_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
         client.stop()
-    
+
     async def send_addr_err(self, dua, eid_iid, dst_iid):
         'Thread 1.2 5.23.3.6.4'
         dua_bytes = ipaddress.IPv6Address(dua).packed
         payload = ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=dua_bytes).array()
-        payload += ThreadTLV(t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
+        payload += ThreadTLV(
+            t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
 
-        prefix_bytes = ipaddress.IPv6Address(db.get('dongle_prefix').split('/')[0]).packed
+        prefix_bytes = ipaddress.IPv6Address(
+            db.get('dongle_prefix').split('/')[0]).packed
         dst = ipaddress.IPv6Address(prefix_bytes[0:8] + bytes.fromhex(dst_iid))
 
         logging.info(
             'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
         client = CoapClient()
-        await client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE, payload)
+        await client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
+                                 payload)
         client.stop()
-    
+
     def remove_entry(self, entry=None, dua=None):
         if not entry:
             for entry_ in self.entries:
@@ -305,8 +313,8 @@ class DUAHandler():
                     entry = entry_
         if not entry:
             return
-        logging.info('DUA %s with EID %s has been removed' % (
-            entry.dua, entry.eid))
+        logging.info(
+            'DUA %s with EID %s has been removed' % (entry.dua, entry.eid))
         self.ndproxy.add_del_dua('del', entry.dua)
         self.entries.remove(entry)
 
@@ -345,8 +353,9 @@ class DUAHandler():
         self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
 
         # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
-            aiocoap.NON, db.get('all_domain_bbrs'), entry.dua))
+        asyncio.ensure_future(
+            DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'),
+                                  entry.dua))
 
         # TODO: save entries to database
 
@@ -358,8 +367,8 @@ class Res_N_DR(resource.Resource):
         status = DMStatus.ST_UNSPEC
 
         # Incoming TLVs parsing
-        logging.info(
-            'in %s req: %s' % (URI.N_DR, ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s req: %s' %
+                     (URI.N_DR, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # BBR Primary/Secondary status
         if 'primary' not in db.get('bbr_status'):
@@ -369,18 +378,24 @@ class Res_N_DR(resource.Resource):
             eid = None
             elapsed = 0
 
-            # Find TLVs
-            for tlv in ThreadTLV.sub_tlvs(request.payload):
-                if tlv.type is TLV.A_ML_EID and tlv.length == 8:
-                    eid = tlv.value.hex()
-                elif tlv.type is TLV.A_TARGET_EID:
-                    try:
-                        req_dua = bytes(tlv.value)
-                        dua = ipaddress.IPv6Address(req_dua).compressed
-                    except:
-                        status = DMStatus.ST_INV_ADDR
-                elif tlv.type is TLV.A_TIME_SINCE_LAST_TRANSACTION and tlv.length == 4:
-                    elapsed = struct.unpack('!I', tlv.value)[0]
+            # ML-EID TLV
+            value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
+            if value:
+                eid = value.hex()
+            
+            # Target EID TLV
+            value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
+            if value:
+                try:
+                    req_dua = bytes(value)
+                    dua = ipaddress.IPv6Address(req_dua).compressed
+                except:
+                    status = DMStatus.ST_INV_ADDR
+            
+            # Time Since Last Transaction TLV
+            value = ThreadTLV.get_value(request.payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
+            if value:
+                elapsed = struct.unpack('!I', value)[0]
 
             if eid and dua:
                 if DUA_HNDLR.reg_update(eid, dua, elapsed):
@@ -404,20 +419,21 @@ class Res_B_BMR(resource.Resource):
 
     async def render_post(self, request):
         # Incoming TLVs parsing
-        logging.info('in %s req: %s' % (URI.B_BMR,
-                                     ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s req: %s' %
+                     (URI.B_BMR, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Primary BBR shouldn't receive this message
         if not 'primary' in db.get('bbr_status'):
             return aiocoap.message.NoResponse
 
+        # IPv6 Addresses TLV
         addrs = []
-        timeout = None
-        for tlv in ThreadTLV.sub_tlvs(request.payload):
-            if tlv.type is TLV.A_IPV6_ADDRESSES and tlv.length % 16 is 0:
-                _, addrs = Res_N_MR._parse_addrs(tlv)
-            elif tlv.type is TLV.A_TIMEOUT and tlv.length == 4:
-                timeout = tlv.value
+        value = ThreadTLV.get_value(request.payload, TLV.A_IPV6_ADDRESSES)
+        if value:
+            _, addrs = Res_N_MR._parse_addrs(value)
+
+        # Timeout TLV
+        timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
 
         # Register valid addresses
         if addrs and timeout:
@@ -431,27 +447,26 @@ class Res_B_BQ(resource.Resource):
 
     async def render_post(self, request):
         # Incoming TLVs parsing
-        logging.info(
-            'in %s qry: %s' % (URI.B_BQ, ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s qry: %s' %
+                     (URI.B_BQ, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
             return aiocoap.message.NoResponse
 
         dua = None
-        rloc16 = None
-        for tlv in ThreadTLV.sub_tlvs(request.payload):
-            if tlv.type is TLV.A_TARGET_EID and tlv.length == 16:
-                dua = ipaddress.IPv6Address(tlv.value)
-            elif tlv.type is TLV.A_RLOC16 and tlv.length == 2:
-                rloc16 = tlv.value
+        value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
+        if value:
+            dua = ipaddress.IPv6Address(value)
+        rloc16 = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
 
         if not dua:
             return aiocoap.message.NoResponse
 
         # Send BB.ans to the requester
-        asyncio.ensure_future(DUA_HNDLR.send_bb_ans(aiocoap.CON, 
-            request.remote.sockaddr[0], dua, rloc16))
+        asyncio.ensure_future(
+            DUA_HNDLR.send_bb_ans(aiocoap.CON, request.remote.sockaddr[0], dua,
+                                  rloc16))
 
         return aiocoap.message.NoResponse
 
@@ -461,8 +476,8 @@ class Res_B_BA(resource.Resource):
 
     async def render_post(self, request):
         # Incoming TLVs parsing
-        logging.info(
-            'in %s ans: %s' % (URI.B_BA, ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s ans: %s' %
+                     (URI.B_BA, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
@@ -473,17 +488,21 @@ class Res_B_BA(resource.Resource):
         eid = None
         elapsed = None
         net_name = None
-        for tlv in ThreadTLV.sub_tlvs(request.payload):
-            if tlv.type is TLV.A_TARGET_EID and tlv.length == 16:
-                dua = ipaddress.IPv6Address(tlv.value).compressed
-            elif tlv.type is TLV.A_RLOC16 and tlv.length == 2:
-                rloc16 = tlv.value.hex()
-            elif tlv.type is TLV.A_ML_EID and tlv.length == 8:
-                eid = tlv.value.hex()
-            elif tlv.type is TLV.A_TIME_SINCE_LAST_TRANSACTION and tlv.length == 4:
-                elapsed = struct.unpack('!I', tlv.value)[0]
-            elif tlv.type is TLV.A_NETWORK_NAME and tlv.length <= 16:
-                net_name = struct.unpack('%ds' % tlv.length, tlv.value)[0]
+        value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
+        if value:
+            dua = ipaddress.IPv6Address(value).compressed
+        value = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
+        if value:
+            rloc16 = value.hex()
+        value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
+        if value:
+            eid = value.hex()
+        value = ThreadTLV.get_value(request.payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
+        if value:
+            elapsed = struct.unpack('!I', value)[0]
+        value = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
+        if value:
+            net_name = struct.unpack('%ds' % len(value), value)[0]
 
         # Check if all required TLVs are present
         if None in (dua, eid, elapsed, net_name):
@@ -504,13 +523,15 @@ class Res_B_BA(resource.Resource):
                 # Duplication detected!
                 DUA_HNDLR.duplicated_found(dua)
                 # Send ADDR_ERR.ntf
-                asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
+                asyncio.ensure_future(
+                    DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
         else:
             # Send ADDR_NTF.ans
             dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
-            bbr_rloc16 = ipaddress.IPv6Address(db.get('dongle_rloc')).packed[-2:]
-            asyncio.ensure_future(DUA_HNDLR.send_bb_ans(
-                aiocoap.CON, dst, dua, eid, bbr_rloc16))
+            bbr_rloc16 = ipaddress.IPv6Address(
+                db.get('dongle_rloc')).packed[-2:]
+            asyncio.ensure_future(
+                DUA_HNDLR.send_bb_ans(aiocoap.CON, dst, dua, eid, bbr_rloc16))
 
         return aiocoap.message.NoResponse
 
@@ -520,8 +541,8 @@ class Res_A_AQ(resource.Resource):
 
     async def render_post(self, request):
         # Incoming TLVs parsing
-        logging.info(
-            'in %s qry: %s' % (URI.A_AQ, ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s qry: %s' %
+                     (URI.A_AQ, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
@@ -529,9 +550,9 @@ class Res_A_AQ(resource.Resource):
 
         # Find sub TLVs
         dua = None
-        for tlv in ThreadTLV.sub_tlvs(request.payload):
-            if tlv.type is TLV.A_TARGET_EID and tlv.length == 16:
-                dua = ipaddress.IPv6Address(bytes(tlv.value))
+        value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
+        if value:
+            dua = ipaddress.IPv6Address(bytes(value))
         if not dua:
             return aiocoap.message.NoResponse
 
@@ -562,8 +583,8 @@ class Res_A_AE(resource.Resource):
 
     async def render_post(self, request):
         # Incoming TLVs parsing
-        logging.info(
-            'in %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(request.payload)))
+        logging.info('in %s ntf: %s' %
+                     (URI.A_AE, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
@@ -572,11 +593,12 @@ class Res_A_AE(resource.Resource):
         # Find sub TLVs
         dua = None
         eid = None
-        for tlv in ThreadTLV.sub_tlvs(request.payload):
-            if tlv.type is TLV.A_TARGET_EID and tlv.length == 16:
-                dua = ipaddress.IPv6Address(bytes(tlv.value))
-            if tlv.type is TLV.A_ML_EID and tlv.length == 8:
-                eid = tlv.value.hex()
+        value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
+        if value:
+            dua = ipaddress.IPv6Address(bytes(value))
+        value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
+        if value:
+            eid = value.hex()
         if not dua or not eid:
             return aiocoap.message.NoResponse
 
@@ -591,6 +613,7 @@ class Res_A_AE(resource.Resource):
             DUA_HNDLR.remove_entry(dua=dua)
 
         return aiocoap.message.NoResponse
+
 
 class CoapServer():
     '''CoAP Server'''
@@ -644,7 +667,7 @@ class COAPSERVER(Ktask):
 
             # Listen for CoAP in Realm-Local All-Routers multicast address
             MCAST_HNDLR.mcrouter.join_leave_group('join', 'ff03::2',
-                db.get('interior_ifnumber'))
+                                                  db.get('interior_ifnumber'))
 
         # Thread side server
         self.server_mm = CoapServer(
@@ -682,7 +705,8 @@ class COAPSERVER(Ktask):
         self.server_mm.stop()
         self.server_mc.stop()
         self.server_bb.stop()
-        MCAST_HNDLR.mcrouter.join_leave_group('leave', db.get('all_network_bbrs'))
+        MCAST_HNDLR.mcrouter.join_leave_group('leave',
+                                              db.get('all_network_bbrs'))
         db.set('bbr_status', 'off')
         dua_prefix = db.get('dua_prefix')
         if dua_prefix:
@@ -694,8 +718,10 @@ class COAPSERVER(Ktask):
                 on_mesh=True,
                 default=True,
                 dp=True)
-            MCAST_HNDLR.mcrouter.join_leave_group('leave', db.get('all_domain_bbrs'))
-            MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2', db.get('interior_ifnumber'))
+            MCAST_HNDLR.mcrouter.join_leave_group('leave',
+                                                  db.get('all_domain_bbrs'))
+            MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2',
+                                                  db.get('interior_ifnumber'))
 
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()

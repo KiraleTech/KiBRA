@@ -19,8 +19,7 @@ class ThreadTLV():
 
         self.type = int(self.data[0])
         self.length = int(self.data[1])
-        if self.length > 0:
-            self.value = self.data[2:]
+        self.value = self.data[2:]
 
     def __str__(self):
         result = '%3u | %3u |' % (self.type, self.length)
@@ -60,3 +59,11 @@ class ThreadTLV():
             result += '{ %s } ' % tlv
         return result
 
+    @staticmethod
+    def get_value(data, type_):
+        '''Return the array value of the TLV of type type_ from data'''
+        for tlv in ThreadTLV.sub_tlvs(data):
+            if tlv.type == type_:
+                # TODO: check size depending on the type
+                return tlv.value
+        return None
