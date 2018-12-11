@@ -97,6 +97,8 @@ class MDNS(Ktask):
             'mn': DEVICE_NAME,
             'sq': struct.pack('!I', db.get('bbr_seq')),
             'bb': struct.pack('!H', db.get('bbr_port')),
+            # TODO: make it configurable
+            'dn': 'Thread'
         }
 
         if self.service:
@@ -109,7 +111,9 @@ class MDNS(Ktask):
 
         # Announce the service with the new data
         type_ = '_meshcop._udp.local.'
-        name = '%s %s %s' % (db.get('dongle_name'), VENDOR_NAME, DEVICE_NAME)
+        name = '%s-%s %s %s' % (db.get('dongle_name'),
+                                db.get('interior_ifname'), VENDOR_NAME,
+                                DEVICE_NAME)
         self.service = zeroconf.ServiceInfo(
             type_=type_,
             name='%s.%s' % (name, type_),
