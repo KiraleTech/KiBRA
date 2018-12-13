@@ -55,7 +55,18 @@ def _enable_ecm():
 
 def _dongle_apply_config():
     # Config network parameters
-    SERIAL_DEV.ksh_cmd('config legacy off')  # Enable Thread 1.2
+    if 'dongle_emac' in db.CFG:
+        SERIAL_DEV.ksh_cmd('config emac %s' % db.get('dongle_emac'))
+    if db.get('dongle_outband'):
+        SERIAL_DEV.ksh_cmd('config outband')
+    if 'dongle_xpanid' in db.CFG:
+        SERIAL_DEV.ksh_cmd('config xpanid %s' % db.get('dongle_xpanid'))
+    if 'dongle_netkey' in db.CFG:
+        SERIAL_DEV.ksh_cmd('config mkey %s' % db.get('dongle_netkey'))
+    if 'dongle_sjitter' in db.CFG:
+        SERIAL_DEV.ksh_cmd('config sjitter %s' % db.get('dongle_sjitter'))
+    if 'dongle_prefix' in db.CFG:
+        SERIAL_DEV.ksh_cmd('config prefix %s' % db.get('dongle_prefix'))
     if 'dongle_channel' in db.CFG:
         logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
         SERIAL_DEV.ksh_cmd('config channel %s' % db.get('dongle_channel'))
@@ -70,13 +81,23 @@ def _dongle_apply_config():
         logging.info('Configure dongle comissioner credential %s.',
                      db.get('dongle_commcred'))
         SERIAL_DEV.ksh_cmd('config commcred "%s"' % db.get('dongle_commcred'))
+
+    # Set role
     role = db.get('dongle_role') or 'leader'
     logging.info('Set dongle as %s.', role)
     SERIAL_DEV.ksh_cmd('config role %s' % role)
 
+    # Enable Thread 1.2
+    SERIAL_DEV.ksh_cmd('config legacy off')
+
 
 def _configure():
     global SERIAL_DEV
+
+    # Force clearing if desired by config
+    if db.get('dongle_clear'):
+        logging.info('Forcing dongle reset...')
+        SERIAL_DEV.ksh_cmd('clear')
 
     # Wait for the dongle to reach a steady status
     logging.info('Waiting until dongle is joined...')
