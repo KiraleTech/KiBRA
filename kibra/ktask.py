@@ -63,7 +63,7 @@ class Ktask():
         self.is_alive = True
 
         # Preconfiguration
-        if db.get('autostart') == 1 and self.check_status() is status.STOPPED:
+        if self.check_status() is status.STOPPED:
             db.set(self.status_key, status.STOPPED)
             db.set(self.action_key, action.START)
         else:

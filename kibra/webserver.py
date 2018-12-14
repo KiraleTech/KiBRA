@@ -123,3 +123,4 @@ def start():
         except OSError:
             time.sleep(1)
     asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
+    logging.info('Webserver is up.')
