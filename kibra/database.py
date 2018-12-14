@@ -25,6 +25,7 @@ DB_ITEMS = {
     'action_dhcp': [str, None, lambda x: True, True, False],
     'action_diags': [str, None, lambda x: True, True, False],
     'action_dns': [str, None, lambda x: True, True, False],
+    'action_kibra': [str, None, lambda x: True, True, False],
     'action_mdns': [str, None, lambda x: True, True, False],
     'action_nat': [str, None, lambda x: True, True, False],
     'action_network': [str, None, lambda x: True, True, False],
@@ -80,6 +81,7 @@ DB_ITEMS = {
     'status_dhcp': [str, None, lambda x: True, False, False],
     'status_diags': [str, None, lambda x: True, False, False],
     'status_dns': [str, None, lambda x: True, False, False],
+    'status_kibra': [str, None, lambda x: True, False, False],
     'status_mdns': [str, None, lambda x: True, False, False],
     'status_nat': [str, None, lambda x: True, False, False],
     'status_network': [str, None, lambda x: True, False, False],
@@ -158,7 +160,8 @@ def save():
         # Collect persistent values
         for key in DB_ITEMS.keys():
             if DB_ITEMS[key][DB_ITEMS_PERS]:
-                config[key] = CFG[key]
+                if key in CFG:
+                    config[key] = CFG[key]
         if os.path.isfile(CFG_FILE):
             logging.debug('Saving configuration file %s', CFG_FILE)
             config = json.dumps(OrderedDict(sorted(config.items())), indent=2)
