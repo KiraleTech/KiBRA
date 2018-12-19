@@ -11,7 +11,7 @@ import urllib
 
 import kibra.database as db
 from kibra.diags import DIAGS_DB
-from kibra.ksh import bbr_dataset_update
+from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.shell import bash
 
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
@@ -68,6 +68,13 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
             if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
                 bbr_dataset_update()
             data = 'OK'
+        elif self.path.startswith('/ksh'):
+            req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            cmd = req.get('c', None)
+            if cmd:
+                data = '\n'.join(send_cmd(cmd[0]))
+            else:
+                return
         elif self.path.startswith('/ping'):
             req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             dst = req.get('dst', ['0100::'])[0] # Discard address by default

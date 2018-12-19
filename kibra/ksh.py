@@ -13,6 +13,10 @@ from kibra.thread import TLV
 SERIAL_DEV = None
 
 
+def send_cmd(cmd, debug_level=None):
+    return SERIAL_DEV.ksh_cmd(cmd, debug_level)
+
+
 def _find_device(snum):
     '''Find the serial device with the required serial number'''
     if snum:
@@ -26,101 +30,107 @@ def _find_device(snum):
     if kirale_devs:
         logging.info('KiNOS device was found on %s!', kirale_devs[0].port)
         return kirale_devs[0].port
-    raise Exception('Error: No KiNOS devices found.')
+    logging.warn('No KiNOS devices found.')
 
 
-def _enable_ecm():
+def enable_ecm():
     '''Find the device and initialize the port'''
     global SERIAL_DEV
 
     # Find device and initialize port
     port = _find_device(db.get('dongle_serial'))
+    if not port:
+        return
     logging.info('Serial device is %s.', port)
     db.set('serial_device', port)
     SERIAL_DEV = kiserial.KiSerial(port, debug=kiserial.KiDebug(1))
-    SERIAL_DEV.ksh_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
+    send_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
 
     # Save serial number
-    db.set('dongle_serial', SERIAL_DEV.ksh_cmd('show snum')[0])
+    db.set('dongle_serial', send_cmd('show snum')[0])
 
     # Enable ECM if not enabled
-    if 'off' in SERIAL_DEV.ksh_cmd('show hwconfig')[3]:
+    if 'off' in send_cmd('show hwconfig')[3]:
         logging.info('Enabling CDC Ethernet and reseting device.')
-        SERIAL_DEV.ksh_cmd('config hwmode 4')
-        SERIAL_DEV.ksh_cmd('reset')
+        send_cmd('config hwmode 4')
+        send_cmd('reset')
         sleep(0.5)
         del SERIAL_DEV
-        _enable_ecm()
+        enable_ecm()
 
 
 def _dongle_apply_config():
     # Config network parameters
     if 'dongle_emac' in db.CFG:
-        SERIAL_DEV.ksh_cmd('config emac %s' % db.get('dongle_emac'))
+        send_cmd('config emac %s' % db.get('dongle_emac'))
     if db.get('dongle_outband'):
-        SERIAL_DEV.ksh_cmd('config outband')
+        # TODO: make sure that the required settings exist
+        send_cmd('config outband')
     if 'dongle_xpanid' in db.CFG:
-        SERIAL_DEV.ksh_cmd('config xpanid %s' % db.get('dongle_xpanid'))
+        send_cmd('config xpanid %s' % db.get('dongle_xpanid'))
     if 'dongle_netkey' in db.CFG:
-        SERIAL_DEV.ksh_cmd('config mkey %s' % db.get('dongle_netkey'))
+        send_cmd('config mkey %s' % db.get('dongle_netkey'))
     if 'dongle_sjitter' in db.CFG:
-        SERIAL_DEV.ksh_cmd('config sjitter %s' % db.get('dongle_sjitter'))
+        send_cmd('config sjitter %s' % db.get('dongle_sjitter'))
     if 'dongle_prefix' in db.CFG:
-        SERIAL_DEV.ksh_cmd('config prefix %s' % db.get('dongle_prefix'))
+        send_cmd('config mlprefix %s' % db.get('dongle_prefix'))
     if 'dongle_channel' in db.CFG:
         logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
-        SERIAL_DEV.ksh_cmd('config channel %s' % db.get('dongle_channel'))
+        send_cmd('config channel %s' % db.get('dongle_channel'))
     if 'dongle_panid' in db.CFG:
         logging.info('Configure dongle panid %s.', db.get('dongle_panid'))
-        SERIAL_DEV.ksh_cmd('config panid %s' % db.get('dongle_panid'))
+        send_cmd('config panid %s' % db.get('dongle_panid'))
     if 'dongle_netname' in db.CFG:
         logging.info('Configure dongle network name %s.',
                      db.get('dongle_netname'))
-        SERIAL_DEV.ksh_cmd('config netname "%s"' % db.get('dongle_netname'))
+        send_cmd('config netname "%s"' % db.get('dongle_netname'))
     if 'dongle_commcred' in db.CFG:
         logging.info('Configure dongle comissioner credential %s.',
                      db.get('dongle_commcred'))
-        SERIAL_DEV.ksh_cmd('config commcred "%s"' % db.get('dongle_commcred'))
+        send_cmd('config commcred "%s"' % db.get('dongle_commcred'))
 
     # Set role
     role = db.get('dongle_role') or 'leader'
     logging.info('Set dongle as %s.', role)
-    SERIAL_DEV.ksh_cmd('config role %s' % role)
+    send_cmd('config role %s' % role)
 
     # Enable Thread 1.2
-    SERIAL_DEV.ksh_cmd('config legacy off')
+    send_cmd('config legacy off')
 
 
 def _configure():
     global SERIAL_DEV
 
+    dongle_status = send_cmd(
+        'show status', debug_level=kiserial.KiDebug.NONE)[0]
+
     # Force clearing if desired by config
-    if db.get('dongle_clear'):
+    if db.get('dongle_clear') and dongle_status not in ('none', 'booting'):
         logging.info('Forcing dongle reset...')
-        SERIAL_DEV.ksh_cmd('clear')
+        send_cmd('clear')
 
     # Wait for the dongle to reach a steady status
     logging.info('Waiting until dongle is joined...')
     db.set('dongle_status', 'disconnected')
     dongle_status = ''
     while not ('none' in dongle_status or 'joined' in dongle_status):
-        dongle_status = SERIAL_DEV.ksh_cmd(
+        dongle_status = send_cmd(
             'show status', debug_level=kiserial.KiDebug.NONE)[0]
         sleep(1)
 
     # Different actions according to dongle status
     if dongle_status == 'none':
         _dongle_apply_config()
-        SERIAL_DEV.ksh_cmd('ifup')
+        send_cmd('ifup')
         _configure()
     elif dongle_status == 'none - saved configuration':
-        SERIAL_DEV.ksh_cmd('ifup')
+        send_cmd('ifup')
         _configure()
     elif dongle_status == 'joined':
         pass
     else:  # Other 'none' statuses
         logging.warning('Dongle status was "%s".' % dongle_status)
-        SERIAL_DEV.ksh_cmd('clear')
+        send_cmd('clear')
         _configure()
 
     # Wait until the dongle is a router
@@ -130,18 +140,18 @@ def _configure():
     SERIAL_DEV.wait_for('role', ['router', 'leader'])
 
     # A non-router device can't be border router
-    if SERIAL_DEV.ksh_cmd('show role')[0] not in ('router', 'leader'):
-        SERIAL_DEV.ksh_cmd('clear')
+    if send_cmd('show role')[0] not in ('router', 'leader'):
+        send_cmd('clear')
         SERIAL_DEV.wait_for('status', ['none'])
         _configure()
 
 
 def _dongle_get_config():
-    db.set('dongle_role', SERIAL_DEV.ksh_cmd('show role')[0])
-    db.set('dongle_status', SERIAL_DEV.ksh_cmd('show status')[0])
+    db.set('dongle_role', send_cmd('show role')[0])
+    db.set('dongle_status', send_cmd('show status')[0])
 
     # Get mesh rloc and link local addresses
-    addrs = SERIAL_DEV.ksh_cmd('show ipaddr')
+    addrs = send_cmd('show ipaddr')
     for ip6_addr in addrs:
         if ip6_addr.startswith('ff'):
             # KiNOS registers multicast addresses with MLR.req
@@ -163,7 +173,7 @@ def _dongle_get_config():
 
 def _enable_br():
     '''Enable CDC ETH traffic'''
-    SERIAL_DEV.ksh_cmd('config brouter on')
+    send_cmd('config brouter on')
     logging.info('Border router has been enabled.')
 
 
@@ -197,9 +207,9 @@ def bbr_dataset_update():
     db.save()
 
     # Enable BBR
-    SERIAL_DEV.ksh_cmd('config service add %u %s %s' %
-                       (THREAD_ENTERPRISE_NUMBER, THREAD_SERVICE_DATA_BBR,
-                        bytes(s_server_data).hex()))
+    send_cmd('config service add %u %s %s' % (THREAD_ENTERPRISE_NUMBER,
+                                              THREAD_SERVICE_DATA_BBR,
+                                              bytes(s_server_data).hex()))
     logging.info('BBR update: Seq. = %d MLR Timeout = %d, Rereg. Delay = %d' %
                  (bbr_sequence_number, mlr_timeout, reregistration_delay))
 
@@ -264,18 +274,17 @@ def prefix_handle(
     flags = '0x' + str(hex(flags).replace('0x', '').zfill(4))
     pool, length = prefix.split('/')
 
-    SERIAL_DEV.ksh_cmd(
-        'config %s %s %s %s %s' % (type_, action, pool, length, flags))
+    send_cmd('config %s %s %s %s %s' % (type_, action, pool, length, flags))
     logging.info('Config %s %s %s/%s', type_, action, pool, length)
 
 
 def _bagent_on():
-    SERIAL_DEV.ksh_cmd('config bagent on')
+    send_cmd('config bagent on')
     logging.info('Border agent has been enabled.')
 
 
 def _bagent_off():
-    SERIAL_DEV.ksh_cmd('config bagent off')
+    send_cmd('config bagent off')
     logging.info('Border agent has been disabled.')
 
 
@@ -284,12 +293,11 @@ class SERIAL(Ktask):
         Ktask.__init__(
             self,
             name='serial',
-            start_keys=[],
+            start_keys=['dongle_serial'],
             stop_tasks=['nat', 'diags'],
             period=2)
 
     def kstart(self):
-        _enable_ecm()
         dongle_conf()
         _configure()
         _dongle_get_config()
@@ -299,7 +307,7 @@ class SERIAL(Ktask):
 
     def kstop(self):
         # _bagent_off()
-        SERIAL_DEV.ksh_cmd('ifdown')
+        send_cmd('ifdown')
 
     async def periodic(self):
         # Detect if serial was disconnected

@@ -19,7 +19,7 @@ from kibra.ktask import status
 from kibra.mdns import MDNS
 from kibra.nat import NAT
 from kibra.network import NETWORK
-from kibra.ksh import SERIAL
+from kibra.ksh import enable_ecm, SERIAL
 
 TASKS = []
 SERVER = None
@@ -28,6 +28,7 @@ async def _master():
     # TODO: Have a way to completely stop the daemon
     while True:
         # Wait until the start command is received
+        db.set('status_kibra', 'stopped')
         while db.get('action_kibra') != 'start':
             await asyncio.sleep(0.2)
 
@@ -69,6 +70,9 @@ def _main():
 
     # Load database
     db.load()
+
+    # Find connected dongle
+    enable_ecm()
 
     # Start web interface
     webserver.start()
