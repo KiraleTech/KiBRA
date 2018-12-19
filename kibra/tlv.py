@@ -36,7 +36,9 @@ class ThreadTLV():
     def sub_tlvs(data=None):
         '''Generate ThreadTLV objects with the contents of the current TLV'''
         tlvs = []
-        if isinstance(data, str):
+        if not data:
+            return tlvs
+        elif isinstance(data, str):
             data = bytearray.fromhex(data)
         elif isinstance(data, bytes):
             data = bytearray(data)
