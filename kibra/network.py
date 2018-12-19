@@ -30,7 +30,7 @@ def get_rloc_from_short(prefix, rloc16):
     prefix = prefix.split('/')[0]
     prefix_bytes = ipaddress.IPv6Address(prefix).packed
     rloc_bytes = prefix_bytes[0:8] + bytes.fromhex(
-        '000000fffe00') + struct.pack('>H', rloc16)
+        '000000fffe00') + struct.pack('>H', int(rloc16))
     return ipaddress.IPv6Address(rloc_bytes).compressed
 
 
