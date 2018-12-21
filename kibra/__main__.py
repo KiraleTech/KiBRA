@@ -110,7 +110,9 @@ if __name__ == '__main__':
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format='\r%(asctime)s - %(levelname)s [%(module)s]: %(message)s')
+        format='\r%(asctime)s - %(levelname)s [%(module)s]: %(message)s',
+        filename=db.LOG_FILE,
+        filemode='w')
 
     if args.form:
         topology.form_topology()

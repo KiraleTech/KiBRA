@@ -7,6 +7,7 @@ from threading import RLock
 
 CFG_PATH = '/opt/kirale/'
 CFG_FILE = CFG_PATH + 'kibra.cfg'
+LOG_FILE = CFG_PATH + 'kibra.log'
 # Default configuration
 CFG = {'dongle_name': 'Test', 'dongle_commcred': 'KIRALE'}
 # User configuration read from file

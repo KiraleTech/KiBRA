@@ -14,7 +14,10 @@ SERIAL_DEV = None
 
 
 def send_cmd(cmd, debug_level=None):
-    return SERIAL_DEV.ksh_cmd(cmd, debug_level)
+    logging.info('ksh> %s', cmd)
+    resp = SERIAL_DEV.ksh_cmd(cmd, debug_level)
+    logging.info(resp)
+    return resp
 
 
 def _find_device(snum):
@@ -43,7 +46,8 @@ def enable_ecm():
         return
     logging.info('Serial device is %s.', port)
     db.set('serial_device', port)
-    SERIAL_DEV = kiserial.KiSerial(port, debug=kiserial.KiDebug(1))
+    SERIAL_DEV = kiserial.KiSerial(
+        port, debug=kiserial.KiDebug(kiserial.KiDebug.NONE))
     send_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
 
     # Save serial number

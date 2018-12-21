@@ -52,55 +52,64 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
         file_path = '%s%s' % (PUBLIC_DIR, self.path.replace('/assets', ''))
         mime_type = 'text/json'
 
-        if self.path.startswith('/api'):
-            req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            for key in req.keys():
-                if not key in db.modifiable_keys():
-                    self.send_response(http.HTTPStatus.BAD_REQUEST)
+        try:
+            if self.path.startswith('/api'):
+                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                for key in req.keys():
+                    if not key in db.modifiable_keys():
+                        self.send_response(http.HTTPStatus.BAD_REQUEST)
+                        return
+                # Apply incoming changes
+                modif_keys = set()
+                for key, value in req.items():
+                    if str(db.get(key)) != value[0]:
+                        db.set(key, value[0])
+                        modif_keys.add(key)
+                # Special actions
+                if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
+                    bbr_dataset_update()
+                data = 'OK'
+            elif self.path.startswith('/ksh'):
+                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                cmd = req.get('c', None)
+                if cmd:
+                    data = '\n'.join(send_cmd(cmd[0]))
+                else:
                     return
-            # Apply incoming changes
-            modif_keys = set()
-            for key, value in req.items():
-                if str(db.get(key)) != value[0]:
-                    db.set(key, value[0])
-                    modif_keys.add(key)
-            # Special actions
-            if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
-                bbr_dataset_update()
-            data = 'OK'
-        elif self.path.startswith('/ksh'):
-            req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            cmd = req.get('c', None)
-            if cmd:
-                data = '\n'.join(send_cmd(cmd[0]))
+            elif self.path.startswith('/ping'):
+                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                dst = req.get('dst', ['0100::'])[0] # Discard address by default
+                size = req.get('sz', ['0'])[0] # Zero size by default
+                bash('ping -c1 -s%s %s' % (size, dst))
+                data = 'OK'
+            elif self.path == '/logs':
+                # TODO: fancy colourfull autorefresh logs page
+                with open(db.LOG_FILE, 'r') as file_:
+                    data = file_.read()
+                mime_type = 'text/plain'
+            elif self.path == '/db/cfg':
+                data = db.dump()
+            elif self.path == '/db/nodes':
+                data = json.dumps(DIAGS_DB, indent=2)
+            elif self.path == '/db/leases':
+                data = json.dumps(_get_leases(), indent=2)
+            elif os.path.isfile(file_path):
+                if self.path.endswith(".html"):
+                    mime_type = 'text/html'
+                if self.path.endswith(".png"):
+                    mime_type = 'image/png'
+                    binary = True
+                if self.path.endswith(".js"):
+                    mime_type = 'application/javascript'
+                if self.path.endswith(".css"):
+                    mime_type = 'text/css'
+                with open(file_path, 'rb' if binary else 'r') as file_:
+                    data = file_.read()
             else:
+                self.send_response(http.HTTPStatus.NOT_FOUND)
                 return
-        elif self.path.startswith('/ping'):
-            req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            dst = req.get('dst', ['0100::'])[0] # Discard address by default
-            size = req.get('sz', ['0'])[0] # Zero size by default
-            bash('ping -c1 -s%s %s' % (size, dst))
-            data = 'OK'
-        elif self.path == '/db/cfg':
-            data = db.dump()
-        elif self.path == '/db/nodes':
-            data = json.dumps(DIAGS_DB, indent=2)
-        elif self.path == '/db/leases':
-            data = json.dumps(_get_leases(), indent=2)
-        elif os.path.isfile(file_path):
-            if self.path.endswith(".html"):
-                mime_type = 'text/html'
-            if self.path.endswith(".png"):
-                mime_type = 'image/png'
-                binary = True
-            if self.path.endswith(".js"):
-                mime_type = 'application/javascript'
-            if self.path.endswith(".css"):
-                mime_type = 'text/css'
-            with open(file_path, 'rb' if binary else 'r') as file_:
-                data = file_.read()
-        else:
-            self.send_response(http.HTTPStatus.NOT_FOUND)
+        except:
+            self.send_response(http.HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         self.send_response(http.HTTPStatus.OK)
@@ -121,7 +130,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
 
 def start():
     httpd = None
-    logging.info('Loading web server...')
+    print('Loading web server...')
     while not httpd:
         # The port may have not been closed from the previous session
         # TODO: properly close server when stopping app
@@ -130,4 +139,4 @@ def start():
         except OSError:
             time.sleep(1)
     asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
-    logging.info('Webserver is up.')
+    print('Webserver is up.')

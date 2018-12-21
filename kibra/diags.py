@@ -135,6 +135,8 @@ class DIAGS(Ktask):
                 json_node_info['roles'].append('router')
             else:
                 json_node_info['roles'].append('end-device')
+        else:
+            return
 
         # Route 64 TLV
         value = ThreadTLV.get_value(tlvs, TLV.D_ROUTE64)
