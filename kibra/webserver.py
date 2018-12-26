@@ -3,17 +3,21 @@ import http.server
 import json
 import logging
 import os
+import socket
 import socketserver
 import sys
 import time
 import xml.etree.ElementTree
 import urllib
+import zeroconf
 
 import kibra.database as db
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.shell import bash
 
+WEB_PORT = 80
+KIBRA_VERSION = '1.2.0'
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
@@ -135,8 +139,25 @@ def start():
         # The port may have not been closed from the previous session
         # TODO: properly close server when stopping app
         try:
-            httpd = socketserver.TCPServer(('', 80), WebServer)
+            httpd = socketserver.TCPServer(('', WEB_PORT), WebServer)
         except OSError:
             time.sleep(1)
     asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
     print('Webserver is up.')
+
+    # Announce via mDNS
+    announcer = zeroconf.Zeroconf()
+    type_ = '_bbr._tcp.local.'
+    name = 'Kirale-KiBRA %s' % int(time.time())
+    props = {
+        'ven': 'Kirale',
+        'mod': 'KiBRA',
+        'ver': KIBRA_VERSION
+    }
+    service = zeroconf.ServiceInfo(
+            type_=type_,
+            name='%s.%s' % (name, type_),
+            port=WEB_PORT,
+            properties=props)
+    announcer.register_service(service)
+    print('%s service announced via mDNS' % name)

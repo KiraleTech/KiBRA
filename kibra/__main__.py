@@ -33,6 +33,7 @@ async def _master():
             await asyncio.sleep(0.2)
 
         # Start all tasks
+        db.set('status_kibra', 'starting')
         for thread in TASKS:
             asyncio.ensure_future(thread.run())
 
@@ -57,6 +58,7 @@ async def _master():
 
             # Kill all tasks if stop command is received
             if db.get('action_kibra') == 'stop':
+                db.set('status_kibra', 'stopping')
                 for thread in TASKS:
                     db.set('action_' + thread.name, 'kill')
                 db.set('action_kibra', 'none')
