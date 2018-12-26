@@ -14,7 +14,7 @@ def bash(command):
         print('%s%s%s> %s%s%s' % (Fore.YELLOW, 'bash', Fore.RESET, Fore.CYAN,
                                   command, Fore.RESET))
         '''
-        logging.info('bash> %s', command)
+        logging.info(command)
     stdout = alexcouperbash(command)
     if stdout:
         '''

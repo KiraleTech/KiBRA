@@ -14,9 +14,9 @@ SERIAL_DEV = None
 
 
 def send_cmd(cmd, debug_level=None):
-    logging.info('ksh> %s', cmd)
+    logging.info(cmd)
     resp = SERIAL_DEV.ksh_cmd(cmd, debug_level)
-    logging.info(resp)
+    logging.info('\n'.join(resp))
     return resp
 
 

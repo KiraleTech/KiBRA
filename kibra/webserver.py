@@ -21,6 +21,9 @@ KIBRA_VERSION = '1.2.0'
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
+ANNOUNCER = None
+HTTPD = None
+
 
 def _get_leases():
     leases = {}
@@ -58,7 +61,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
 
         try:
             if self.path.startswith('/api'):
-                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                req = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query)
                 for key in req.keys():
                     if not key in db.modifiable_keys():
                         self.send_response(http.HTTPStatus.BAD_REQUEST)
@@ -70,20 +74,24 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                         db.set(key, value[0])
                         modif_keys.add(key)
                 # Special actions
-                if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
+                if not set(['mlr_timeout', 'rereg_delay'
+                            ]).isdisjoint(modif_keys):
                     bbr_dataset_update()
                 data = 'OK'
             elif self.path.startswith('/ksh'):
-                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                req = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query)
                 cmd = req.get('c', None)
                 if cmd:
                     data = '\n'.join(send_cmd(cmd[0]))
                 else:
                     return
             elif self.path.startswith('/ping'):
-                req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                dst = req.get('dst', ['0100::'])[0] # Discard address by default
-                size = req.get('sz', ['0'])[0] # Zero size by default
+                req = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query)
+                dst = req.get('dst',
+                              ['0100::'])[0]  # Discard address by default
+                size = req.get('sz', ['0'])[0]  # Zero size by default
                 bash('ping -c1 -s%s %s' % (size, dst))
                 data = 'OK'
             elif self.path == '/logs':
@@ -133,31 +141,34 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
 
 
 def start():
-    httpd = None
+    global HTTPD, ANNOUNCER
+
     print('Loading web server...')
-    while not httpd:
+    while not HTTPD:
         # The port may have not been closed from the previous session
         # TODO: properly close server when stopping app
         try:
-            httpd = socketserver.TCPServer(('', WEB_PORT), WebServer)
+            HTTPD = socketserver.TCPServer(('', WEB_PORT), WebServer)
         except OSError:
             time.sleep(1)
-    asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
+    asyncio.get_event_loop().run_in_executor(None, HTTPD.serve_forever)
     print('Webserver is up.')
 
     # Announce via mDNS
-    announcer = zeroconf.Zeroconf()
+    ANNOUNCER = zeroconf.Zeroconf()
     type_ = '_bbr._tcp.local.'
     name = 'Kirale-KiBRA %s' % int(time.time())
-    props = {
-        'ven': 'Kirale',
-        'mod': 'KiBRA',
-        'ver': KIBRA_VERSION
-    }
+    props = {'ven': 'Kirale', 'mod': 'KiBRA', 'ver': KIBRA_VERSION}
     service = zeroconf.ServiceInfo(
-            type_=type_,
-            name='%s.%s' % (name, type_),
-            port=WEB_PORT,
-            properties=props)
-    announcer.register_service(service)
+        type_=type_,
+        name='%s.%s' % (name, type_),
+        port=WEB_PORT,
+        properties=props)
+    ANNOUNCER.register_service(service)
     print('%s service announced via mDNS' % name)
+
+
+def stop():
+    print('Stopping web server...')
+    ANNOUNCER.close()
+    HTTPD.server_close()
