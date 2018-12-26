@@ -1,0 +1,13 @@
+[Unit]
+Description=KiBRA Service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/opt/kirale/kibra.sh
+
+[Install]
+WantedBy=multi-user.target
