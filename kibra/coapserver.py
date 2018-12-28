@@ -654,6 +654,7 @@ class COAPSERVER(Ktask):
         all_network_bbrs = NETWORK.get_prefix_based_mcast(
             db.get('dongle_prefix'), 3)
         db.set('all_network_bbrs', all_network_bbrs)
+        logging.info('Joining All Network BBRs group: %s' % all_network_bbrs)
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
         # TODO: update it if dongle_prefix changes
 
@@ -662,14 +663,17 @@ class COAPSERVER(Ktask):
             # Set All Domain BBRs multicast address as per 9.4.8.1
             all_domain_bbrs = NETWORK.get_prefix_based_mcast(dua_prefix, 3)
             db.set('all_domain_bbrs', all_domain_bbrs)
+            logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
             MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
             # TODO: enable radvd
 
             # Listen for CoAP in Realm-Local All-Routers multicast address
+            logging.info('Joining Realm-Local All-Routers group: ff03::2')
             MCAST_HNDLR.mcrouter.join_leave_group('join', 'ff03::2',
                                                   db.get('interior_ifnumber'))
 
         # Thread side server
+        logging.info('Launching CoAP Server in MM port')
         self.server_mm = CoapServer(
             # TODO: bind to RLOC, LL, Realm-Local All-Routers, all_network_bbrs and all_domain_bbrs
             addr='::',
@@ -678,11 +682,13 @@ class COAPSERVER(Ktask):
                        (URI.tuple(URI.N_MR), Res_N_MR()),
                        (URI.tuple(URI.A_AQ), Res_A_AQ()),
                        (URI.tuple(URI.A_AE), Res_A_AE())])
+        logging.info('Launching CoAP Server in MC port')
         self.server_mc = CoapServer(
             # TODO: bind to both RLOC and LL
             addr='::',
             port=DEFS.PORT_MC,
             resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
+        logging.info('Launching CoAP Server in BB port')
         self.server_bb = CoapServer(
             # TODO: bind Res_B_BA to exterior link-local
             addr=all_network_bbrs,
@@ -702,11 +708,17 @@ class COAPSERVER(Ktask):
                 dp=True)
 
     def kstop(self):
+        logging.info('Stopping CoAP Server in MM port')
         self.server_mm.stop()
+        logging.info('Stopping CoAP Server in MC port')
         self.server_mc.stop()
+        logging.info('Stopping CoAP Server in BB port')
         self.server_bb.stop()
-        MCAST_HNDLR.mcrouter.join_leave_group('leave',
-                                              db.get('all_network_bbrs'))
+
+        all_network_bbrs = db.get('all_network_bbrs')
+        logging.info('Leaving All Network BBRs group: %s' % all_network_bbrs)
+        MCAST_HNDLR.mcrouter.join_leave_group('leave', all_network_bbrs)
+
         db.set('bbr_status', 'off')
         dua_prefix = db.get('dua_prefix')
         if dua_prefix:
@@ -718,8 +730,12 @@ class COAPSERVER(Ktask):
                 on_mesh=True,
                 default=True,
                 dp=True)
-            MCAST_HNDLR.mcrouter.join_leave_group('leave',
-                                                  db.get('all_domain_bbrs'))
+
+            all_domain_bbrs = db.get('all_domain_bbrs')
+            logging.info('Leaving All Domain BBRs group: %s' % all_domain_bbrs)
+            MCAST_HNDLR.mcrouter.join_leave_group('leave', all_domain_bbrs)
+
+            logging.info('Leaving Realm-Local All-Routers group: ff03::2')
             MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2',
                                                   db.get('interior_ifnumber'))
 
