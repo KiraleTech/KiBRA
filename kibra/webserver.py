@@ -94,6 +94,9 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 size = req.get('sz', ['0'])[0]  # Zero size by default
                 bash('ping -c1 -s%s %s' % (size, dst))
                 data = 'OK'
+            elif self.path == '/reboot':
+                bash('shutdown -r +2') # Reboot after 2 seconds
+                data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
                 with open(db.LOG_FILE, 'r') as file_:
