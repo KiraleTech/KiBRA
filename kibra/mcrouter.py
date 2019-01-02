@@ -104,6 +104,7 @@ class MCRouter():
 
     def stop(self):
         self.mcr_on = False
+        self.mc6r_sock.close()
 
     def run_daemon(self):
         while self.mcr_on:

@@ -25,6 +25,7 @@ from pyroute2 import IPRoute
 
 # Global variables
 IP = IPRoute()
+DUA_HNDLR = None
 MCAST_HNDLR = None
 
 
@@ -63,6 +64,9 @@ class MulticastHandler():
 
         # Start the multicast routing daemon
         self.mcrouter = MCRouter()
+    
+    def stop(self):
+        self.mcrouter.stop()
 
     def reg_update(self, addrs, addr_tout):
         for addr in addrs:
@@ -204,6 +208,9 @@ class DUAHandler():
 
         # Start the ND Proxy daemon
         self.ndproxy = NDProxy()
+    
+    def stop(self):
+        self.ndproxy.stop()
 
     def reg_update(self, eid, dua, elapsed):
         old_entry = None
@@ -643,7 +650,9 @@ class COAPSERVER(Ktask):
     def kstart(self):
         global DUA_HNDLR
         global MCAST_HNDLR
+        logging.info('Starting DUA handler')
         DUA_HNDLR = DUAHandler()
+        logging.info('Starting Multicast handler')
         MCAST_HNDLR = MulticastHandler()
 
         # Set the default BB port if not provided
@@ -738,6 +747,11 @@ class COAPSERVER(Ktask):
             logging.info('Leaving Realm-Local All-Routers group: ff03::2')
             MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2',
                                                   db.get('interior_ifnumber'))
+        
+        logging.info('Stopping Multicast handler')
+        MCAST_HNDLR.stop()
+        logging.info('Stopping DUA handler')
+        DUA_HNDLR.stop()
 
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()

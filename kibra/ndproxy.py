@@ -86,6 +86,10 @@ class NDProxy():
         #asyncio.ensure_future(self.run_daemon())
         asyncio.get_event_loop().run_in_executor(None, self.run_daemon)
 
+    def stop(self):
+        self.ndp_on = False
+        self.icmp6_sock.close()
+
     def run_daemon(self):
         ext_ifname = db.get('exterior_ifname')
         while self.ndp_on:
