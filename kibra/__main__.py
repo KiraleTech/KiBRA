@@ -87,7 +87,7 @@ def _main():
     #TASKS.append(DHCP())
     #TASKS.append(NAT())
     TASKS.append(DNS())
-    TASKS.append(MDNS())
+    #TASKS.append(MDNS())
     TASKS.append(DIAGS())
     TASKS.append(COAPSERVER())
 
@@ -110,6 +110,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Configure logging
+    # TODO: log file folder might not exist
     logging.basicConfig(
         level=logging.INFO,
         format='\r%(asctime)s - %(levelname)s [%(module)s]: %(message)s',
