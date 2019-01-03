@@ -99,7 +99,7 @@ def _dongle_apply_config():
     send_cmd('config role %s' % role)
 
     # Enable Thread 1.2
-    send_cmd('config legacy off')
+    send_cmd('config thver 3')
 
 
 def _configure():

@@ -1,10 +1,10 @@
+import hashlib
 import ipaddress
 import logging
 import struct
 from socket import AF_INET, AF_INET6
 from time import time
 
-from Cryptodome.Hash import SHA256
 from pyroute2 import IPRoute  # http://docs.pyroute2.org/iproute.html#api
 
 import kibra.database as db
@@ -54,8 +54,9 @@ def _get_ula():
     # Time in hexadecimal
     ntp_time = str(struct.unpack('Q', struct.pack('d', time()))[0])
     eui64 = db.get('dongle_serial').split('+')[-1]  # EUI64
-    sha = SHA256.new((ntp_time + eui64).encode()).hexdigest().zfill(
-        40)  # SHA1 of Time + EUI64
+    sha = hashlib.sha256()
+    sha.update((ntp_time + eui64).encode())  # SHA1 of Time + EUI64
+    sha = sha.hexdigest().zfill(40)
     # fd + last 40 bits of SHA1
     ula = ipaddress.IPv6Address(
         int('fd' + sha[-10:] + '00000000000000000000', 16))
@@ -69,10 +70,12 @@ def _get_prefix(exterior_ifname):
         logging.info('Obtained global prefix %s', prefix)
         return prefix
 
+
 def get_eui48(ifnumber):
     '''Get EUI48 address for the interface'''
     eui64 = IP.link('get', index=ifnumber)[0].get_attr('IFLA_ADDRESS')
     return eui64
+
 
 def get_addrs(ifname, family, scope=None):
     '''Get an address for the interface'''
@@ -82,7 +85,6 @@ def get_addrs(ifname, family, scope=None):
     for addr in IP.get_addr(index=idx, family=family, scope=scope):
         addrs.append(addr.get_attr('IFA_ADDRESS'))
     return addrs
-
     '''
     # No configured address found, try DHCP
     if family == AF_INET:
