@@ -86,7 +86,7 @@ def _main():
     TASKS.append(NETWORK())
     #TASKS.append(DHCP())
     #TASKS.append(NAT())
-    TASKS.append(DNS())
+    #TASKS.append(DNS())
     #TASKS.append(MDNS())
     TASKS.append(DIAGS())
     TASKS.append(COAPSERVER())
