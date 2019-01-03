@@ -4,6 +4,7 @@
 import asyncio
 import argparse
 import asyncio
+import daemonize
 import logging
 from time import sleep
 
@@ -21,8 +22,11 @@ from kibra.nat import NAT
 from kibra.network import NETWORK
 from kibra.ksh import enable_ecm, SERIAL
 
+PID_FILE = '/tmp/kibra.pid'
+
 TASKS = []
 SERVER = None
+
 
 async def _master():
     # TODO: Have a way to completely stop the daemon
@@ -63,9 +67,10 @@ async def _master():
                     db.set('action_' + thread.name, 'kill')
                 db.set('action_kibra', 'none')
                 logging.info('Killing all tasks...')
-        
+
         db.set('status_kibra', 'stopped')
         logging.info('All tasks have now stopped.')
+
 
 def _main():
     global SERVER
@@ -93,11 +98,10 @@ def _main():
 
     if db.get('autostart') == 1:
         db.set('action_kibra', 'start')
-    
-    asyncio.ensure_future(_master())
-    
-    loop.run_forever()
 
+    asyncio.ensure_future(_master())
+
+    loop.run_forever()
 
 
 if __name__ == '__main__':
@@ -122,4 +126,4 @@ if __name__ == '__main__':
     elif args.clear:
         topology.clear_topology()
     else:
-        _main()
+        daemonize.Daemonize(app='KiBRA', pid=PID_FILE, action=_main()).start()

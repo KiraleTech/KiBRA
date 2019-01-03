@@ -122,11 +122,10 @@ class Ktask():
             if task_status is status.STOPPING:
                 if task_action in (action.STOP, action.KILL):
                     for task in self.stop_tasks:
-                        logging.info(
-                            'Task [%s] is waiting for [%s] to stop.',
-                            self.name, task)
-                        while db.get('status_' +
-                                        task) is not status.STOPPED:
+                        logging.info('Task [%s] is waiting for [%s] to stop.',
+                                     self.name, task)
+                        while db.get('status_' + task) is not (status.STOPPED
+                                                               or None):
                             await asyncio.sleep(1)
                     while not db.has_keys(self.stop_keys):
                         logging.info('Task [%s] cannot be stopped' % self.name)
