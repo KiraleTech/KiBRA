@@ -108,11 +108,6 @@ def _configure():
     dongle_status = send_cmd(
         'show status', debug_level=kiserial.KiDebug.NONE)[0]
 
-    # Force clearing if desired by config
-    if db.get('dongle_clear') and dongle_status not in ('none', 'booting'):
-        logging.info('Forcing dongle reset...')
-        send_cmd('clear')
-
     # Wait for the dongle to reach a steady status
     logging.info('Waiting until dongle is joined...')
     db.set('dongle_status', 'disconnected')

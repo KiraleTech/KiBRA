@@ -44,7 +44,6 @@ DB_ITEMS = {
     'bridging_table': [str, None, lambda x: True, False, False],
     'dhcp_pool': [str, None, lambda x: True, False, False],
     'dongle_channel': [int, None, lambda x: True, True, False],
-    'dongle_clear': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, None, lambda x: True, True, True],
     'dongle_eid': [str, None, lambda x: True, False, False],
     'dongle_emac': [str, None, lambda x: True, True, False],
