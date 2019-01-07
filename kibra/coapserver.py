@@ -51,7 +51,6 @@ class DUAEntry():
     def update(self, elapsed):
         self.reg_time = datetime.datetime.now().timestamp() - elapsed
 
-
 class MulticastHandler():
     def __init__(self):
         # Volatile multicast addresses list

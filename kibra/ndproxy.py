@@ -134,7 +134,10 @@ class NDProxy():
         if ifnumber is None:
             ifnumber = db.get('exterior_ifnumber')
         msg = struct.pack('16sI', sn_addr_bytes, ifnumber)
-        self.icmp6_sock.setsockopt(IPPROTO_IPV6, action_, msg)
+        try:
+            self.icmp6_sock.setsockopt(IPPROTO_IPV6, action_, msg)
+        except Exception as e:
+            logging.error(e)
 
         if action == 'add':
             # Add DUA to the list
