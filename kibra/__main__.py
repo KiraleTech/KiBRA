@@ -108,6 +108,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         prog='kibra', description='Kirale Border Router Administration')
     parser.add_argument(
+        '--daemon', required=False, action='store_true', help='run as a daemon')
+    parser.add_argument(
         '--form', required=False, action='store_true', help='form topology')
     parser.add_argument(
         '--clear', required=False, action='store_true', help='clear topology')
@@ -125,5 +127,7 @@ if __name__ == '__main__':
         topology.form_topology()
     elif args.clear:
         topology.clear_topology()
+    elif args.daemon:
+        daemonize.Daemonize(app='KiBRA', pid=PID_FILE, action=_main).start()
     else:
-        daemonize.Daemonize(app='KiBRA', pid=PID_FILE, action=_main()).start()
+        _main()
