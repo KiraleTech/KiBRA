@@ -14,6 +14,7 @@ import zeroconf
 import kibra.database as db
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
+from kibra.network import set_ext_iface
 from kibra.shell import bash
 
 WEB_PORT = 80
@@ -60,9 +61,11 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
         mime_type = 'text/json'
 
         try:
+            # Parse URL fields
+            req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+
+            # Different actions
             if self.path.startswith('/api'):
-                req = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(self.path).query)
                 for key in req.keys():
                     if not key in db.modifiable_keys():
                         self.send_response(http.HTTPStatus.BAD_REQUEST)
@@ -79,23 +82,37 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     bbr_dataset_update()
                 data = 'OK'
             elif self.path.startswith('/ksh'):
-                req = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(self.path).query)
                 cmd = req.get('c', None)
                 if cmd:
                     data = '\n'.join(send_cmd(cmd[0]))
                 else:
                     return
             elif self.path.startswith('/ping'):
-                req = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(self.path).query)
                 dst = req.get('dst',
                               ['0100::'])[0]  # Discard address by default
                 size = req.get('sz', ['0'])[0]  # Zero size by default
                 bash('ping -c1 -s%s %s' % (size, dst))
                 data = 'OK'
+            elif self.path.startswith('/radvd'):
+                backhaul = req.get('bh')
+                domain = req.get('dm')
+                if not backhaul or not domain:
+                    return
+                if not db.get('exterior_ifname'):
+                    set_ext_iface()
+                with open('/etc/radvd.conf', 'w') as file_:
+                    file_.write('interface %s {\n' % db.get('exterior_ifname'))
+                    file_.write('  AdvSendAdvert on;\n')
+                    file_.write(
+                        '  prefix %s { AdvAutonomous on; };\n' % backhaul[0])
+                    file_.write(
+                        '  prefix %s { AdvAutonomous off; };\n' % domain[0])
+                    file_.write('};\n')
+                    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
+                    bash('service radvd restart')
+                data = 'OK'
             elif self.path == '/reboot':
-                bash('shutdown -r +2') # Reboot after 2 seconds
+                bash('shutdown -r +2')  # Reboot after 2 seconds
                 data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page

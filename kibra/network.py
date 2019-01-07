@@ -36,7 +36,7 @@ def get_rloc_from_short(prefix, rloc16):
 
 def _global_netconfig():
     if not db.has_keys(['exterior_ifname']):
-        _set_ext_iface()
+        set_ext_iface()
         logging.info('External interface is %s.', db.get('exterior_ifname'))
     if not db.has_keys(['prefix']):
         logging.info('Trying to obtain a prefix via Prefix Delegation...')
@@ -102,7 +102,7 @@ def get_addrs(ifname, family, scope=None):
     '''
 
 
-def _set_ext_iface():
+def set_ext_iface():
     '''Return the name of the interface with the default IPv4 route'''
     def_routes = IP.get_default_routes(AF_INET)
     if not def_routes:
