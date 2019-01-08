@@ -65,7 +65,7 @@ class DIAGS(Ktask):
         db.set('bbr_status', 'off')
 
     def kstop(self):
-        self.petitioner.protocol.shutdown()
+        self.petitioner.stop()
         #self.petitioner.loop.stop()
 
     async def periodic(self):
