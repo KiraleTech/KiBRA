@@ -312,18 +312,6 @@ class DUAHandler():
                                  payload)
         client.stop()
 
-    def remove_entry(self, entry=None, dua=None):
-        if not entry:
-            for entry_ in self.entries:
-                if dua == entry_.dua:
-                    entry = entry_
-        if not entry:
-            return
-        logging.info(
-            'DUA %s with EID %s has been removed' % (entry.dua, entry.eid))
-        self.ndproxy.add_del_dua('del', entry.dua)
-        self.entries.remove(entry)
-
     async def perform_dad(self, entry):
         # Send BB.qry DUA_DAD_REPEAT times
         for _ in range(DEFS.DUA_DAD_REPEAT):
@@ -365,6 +353,17 @@ class DUAHandler():
 
         # TODO: save entries to database
 
+    def remove_entry(self, entry=None, dua=None):
+        if not entry:
+            for entry_ in self.entries:
+                if dua == entry_.dua:
+                    entry = entry_
+        if not entry:
+            return
+        logging.info(
+            'DUA %s with EID %s has been removed' % (entry.dua, entry.eid))
+        self.ndproxy.add_del_dua('del', entry.dua)
+        self.entries.remove(entry)
 
 class Res_N_DR(resource.Resource):
     '''DUA registration, Thread 1.2 5.23'''
