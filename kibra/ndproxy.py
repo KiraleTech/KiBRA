@@ -64,31 +64,40 @@ class NDProxy():
         # List of PBBR DUAs with finished DAD
         self.duas = {}
 
-        # Create and init the ICMPv6 socket
-        self.icmp6_sock = socket.socket(socket.AF_INET6, socket.SOCK_RAW,
-                                        IPPROTO_ICMPV6)
+        try:
+            # Create and init the ICMPv6 socket
+            self.icmp6_sock = socket.socket(socket.AF_INET6, socket.SOCK_RAW,
+                                            IPPROTO_ICMPV6)
 
-        # Bind to exterior interface only
-        self.icmp6_sock.setsockopt(SOL_SOCKET, SO_BINDTODEVICE,
-                                   db.get('exterior_ifname').encode())
+            # Bind to exterior interface only
+            self.icmp6_sock.setsockopt(SOL_SOCKET, SO_BINDTODEVICE,
+                                       db.get('exterior_ifname').encode())
 
-        # Receive Neighbor Solicitation messages in this socket
-        icmp6_filter = bytearray(32)  # 256 bit flags
-        icmp6_filter = icmp6_filter_setpass(icmp6_filter, ND_NEIGHBOR_SOLICIT)
-        self.icmp6_sock.setsockopt(IPPROTO_ICMPV6, ICMP6_FILTER, icmp6_filter)
+            # Receive Neighbor Solicitation messages in this socket
+            icmp6_filter = bytearray(32)  # 256 bit flags
+            icmp6_filter = icmp6_filter_setpass(icmp6_filter,
+                                                ND_NEIGHBOR_SOLICIT)
+            self.icmp6_sock.setsockopt(IPPROTO_ICMPV6, ICMP6_FILTER,
+                                       icmp6_filter)
 
-        # Set the outgoing hop limit
-        self.icmp6_sock.setsockopt(IPPROTO_IPV6, IPV6_UNICAST_HOPS, 255)
-        self.icmp6_sock.setsockopt(IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255)
+            # Set the outgoing hop limit
+            self.icmp6_sock.setsockopt(IPPROTO_IPV6, IPV6_UNICAST_HOPS, 255)
+            self.icmp6_sock.setsockopt(IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255)
 
-        # Run the daemon
-        self.ndp_on = True
-        #asyncio.ensure_future(self.run_daemon())
-        asyncio.get_event_loop().run_in_executor(None, self.run_daemon)
+            # Run the daemon
+            self.ndp_on = True
+            #asyncio.ensure_future(self.run_daemon())
+            asyncio.get_event_loop().run_in_executor(None, self.run_daemon)
+        except:
+            logging.error('Unable to create the ND Proxy socket.')
 
     def stop(self):
         self.ndp_on = False
-        self.icmp6_sock.close()
+        try:
+            self.icmp6_sock.close()
+        except:
+            logging.warn(
+                'A problem occured while trying to close ND Proxy socket')
 
     def run_daemon(self):
         ext_ifname = db.get('exterior_ifname')
@@ -189,7 +198,10 @@ class NDProxy():
                              flags, tgt_bytes)
 
         # Send ICMPv6 packet
-        self.icmp6_sock.sendto(header + opts, (dst, 0, 0, idx))
+        try:
+            self.icmp6_sock.sendto(header + opts, (dst, 0, 0, idx))
+        except:
+            logging.warn('Cannot send NA to %s' % dst)
 
         # Logging
         logging.info('out na to %s for %s' % (dst, tgt))
