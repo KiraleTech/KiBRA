@@ -72,6 +72,7 @@ DB_ITEMS = {
     'maddrs_perm': [str, None, lambda x: True, False, False],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), False, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), False, False],
+    'mlr_cache': [str, None, lambda x: True, False, False],
     'mlr_timeout': [int, 3600, lambda x: x >= 300 and x < 0xffffffff, True, True],
     'pool4': [str, None, lambda x: True, False, False],
     'prefix': [str, None, lambda x: True, False, False],
