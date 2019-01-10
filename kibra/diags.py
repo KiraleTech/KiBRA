@@ -107,6 +107,8 @@ class DIAGS(Ktask):
                 PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
+            # TODO: this is commented not to generate noise in the test captures
+            '''
             for rloc16 in self.nodes_list:
                 if rloc16 == self.br_rloc16:
                     continue
@@ -116,8 +118,9 @@ class DIAGS(Ktask):
                     node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
                 self._parse_diags(response)
                 time.sleep(0.2)
+            '''
             self._mark_old_nodes()
-
+            
     def _parse_diags(self, tlvs):
         now = _epoch_ms()
         json_node_info = {}
