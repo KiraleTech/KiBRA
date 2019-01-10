@@ -1,6 +1,6 @@
 import logging
 import struct
-from time import sleep
+import time
 
 from kitools import kiserial
 
@@ -58,7 +58,7 @@ def enable_ecm():
         logging.info('Enabling CDC Ethernet and reseting device.')
         send_cmd('config hwmode 4')
         send_cmd('reset')
-        sleep(0.5)
+        time.sleep(0.5)
         del SERIAL_DEV
         enable_ecm()
 
@@ -115,14 +115,16 @@ def _configure():
     while not ('none' in dongle_status or 'joined' in dongle_status):
         dongle_status = send_cmd(
             'show status', debug_level=kiserial.KiDebug.NONE)[0]
-        sleep(1)
+        time.sleep(1)
 
     # Different actions according to dongle status
     if dongle_status == 'none':
         _dongle_apply_config()
+        _enable_br()
         send_cmd('ifup')
         _configure()
     elif dongle_status == 'none - saved configuration':
+        _enable_br()
         send_cmd('ifup')
         _configure()
     elif dongle_status == 'joined':
@@ -132,6 +134,9 @@ def _configure():
         send_cmd('clear')
         _configure()
 
+    # TODO: remove this
+    time.sleep(1)
+    '''
     # Wait until the dongle is a router
     logging.info('Waiting until dongle becomes router...')
     db.set('dongle_role', 'none')
@@ -143,6 +148,7 @@ def _configure():
         send_cmd('clear')
         SERIAL_DEV.wait_for('status', ['none'])
         _configure()
+    '''
 
 
 def _dongle_get_config():
@@ -300,7 +306,6 @@ class SERIAL(Ktask):
         dongle_conf()
         _configure()
         _dongle_get_config()
-        _enable_br()
         bbr_dataset_update()
         # _bagent_on()
 
