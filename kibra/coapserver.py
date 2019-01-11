@@ -532,9 +532,14 @@ class Res_B_BA(resource.Resource):
                     DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
         else:
             # Send ADDR_NTF.ans
-            dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
             bbr_rloc16 = ipaddress.IPv6Address(
                 db.get('dongle_rloc')).packed[-2:]
+            # If this BBR dongle originated the addr_qry, send add_ntf to its
+            # link local address
+            if rloc16 == bbr_rloc16:
+                dst = db.get('dongle_ll')
+            else:
+                dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
             asyncio.ensure_future(
                 DUA_HNDLR.send_bb_ans(aiocoap.CON, dst, dua, eid, bbr_rloc16))
 

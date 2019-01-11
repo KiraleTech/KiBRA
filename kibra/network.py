@@ -34,9 +34,8 @@ def get_rloc_from_short(prefix, rloc16):
 
 
 def _global_netconfig():
-    if not db.has_keys(['exterior_ifname']):
-        set_ext_iface()
-        logging.info('External interface is %s.', db.get('exterior_ifname'))
+    set_ext_iface()
+    logging.info('External interface is %s.', db.get('exterior_ifname'))
     if not db.has_keys(['prefix']):
         logging.info('Trying to obtain a prefix via Prefix Delegation...')
         prefix = _get_prefix(db.get('exterior_ifname'))
@@ -103,13 +102,15 @@ def get_addrs(ifname, family, scope=None):
 
 def set_ext_iface():
     '''Return the name of the interface with the default IPv4 route'''
-    def_routes = IP.get_default_routes(AF_INET)
-    if not def_routes:
-        raise Exception('No external interfaces found.')
-    index = def_routes[0].get_attr('RTA_OIF')
-    links = IP.get_links(index)
-    db.set('exterior_ifname', links[0].get_attr('IFLA_IFNAME'))
-    db.set('exterior_ifnumber', links[0]['index'])
+    if not db.has_keys(['exterior_ifname']):
+        def_routes = IP.get_default_routes(AF_INET)
+        if not def_routes:
+            raise Exception('No external interfaces found.')
+        index = def_routes[0].get_attr('RTA_OIF')
+        links = IP.get_links(index)
+        db.set('exterior_ifname', links[0].get_attr('IFLA_IFNAME'))
+    idx = IP.link_lookup(ifname=db.get('exterior_ifname'))[0]
+    db.set('exterior_ifnumber', idx)
 
 
 def dongle_conf():

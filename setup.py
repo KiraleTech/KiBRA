@@ -20,7 +20,7 @@ with copen(path.join(HERE, 'README.rst'), encoding='utf-8') as _file:
 setup(
     name='kibra',
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.2.0',
+    version='1.2.1',
     description='Kirale Border Router Administration',
     long_description=LONG_DESC,
     # The project's main homepage.
