@@ -369,6 +369,7 @@ class Res_N_DR(resource.Resource):
     '''DUA registration, Thread 1.2 5.23'''
 
     async def render_post(self, request):
+        req_dua = None
         status = DMStatus.ST_UNSPEC
 
         # Incoming TLVs parsing
@@ -379,7 +380,6 @@ class Res_N_DR(resource.Resource):
         if 'primary' not in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
         else:
-            req_dua = None
             dua = None
             eid = None
             elapsed = 0
