@@ -379,6 +379,7 @@ class Res_N_DR(resource.Resource):
         if 'primary' not in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
         else:
+            req_dua = None
             dua = None
             eid = None
             elapsed = 0
