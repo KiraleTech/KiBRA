@@ -299,7 +299,8 @@ class SERIAL(Ktask):
             self,
             name='serial',
             start_keys=['dongle_serial'],
-            stop_tasks=['nat', 'diags'],
+            #stop_tasks=['nat', 'diags'],
+            stop_tasks=['diags'],
             period=2)
 
     def kstart(self):
