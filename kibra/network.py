@@ -33,7 +33,7 @@ def get_rloc_from_short(prefix, rloc16):
     return ipaddress.IPv6Address(rloc_bytes).compressed
 
 
-def _global_netconfig():
+def global_netconfig():
     set_ext_iface()
     logging.info('External interface is %s.', db.get('exterior_ifname'))
     if not db.has_keys(['prefix']):
@@ -44,6 +44,17 @@ def _global_netconfig():
             prefix = _get_ula()
             logging.info('Generated the ULA prefix %s.' % prefix)
         db.set('prefix', prefix)
+        
+    # Detect exterior interface addresses
+    ipv4 = get_addrs(db.get('exterior_ifname'), AF_INET, 0)[0]
+    if ipv4:
+        logging.info('Using %s as exterior IPv4 address.', ipv4)
+        db.set('exterior_ipv4', ipv4)
+    # ipv6 = get_addrs(db.get('exterior_ifname'), AF_INET6, 0)[0]
+    ipv6 = None
+    if ipv6:
+        logging.info('Using %s as exterior IPv6 address.', ipv6)
+        db.set('exterior_ipv6', ipv6)
 
 
 def _get_ula():
@@ -115,19 +126,6 @@ def set_ext_iface():
 
 def dongle_conf():
     '''Configure several network parameters'''
-    # Find exterior interface and prefix
-    _global_netconfig()
-    # Detect exterior interface addresses
-    ipv4 = get_addrs(db.get('exterior_ifname'), AF_INET, 0)[0]
-    if ipv4:
-        logging.info('Using %s as exterior IPv4 address.', ipv4)
-        db.set('exterior_ipv4', ipv4)
-    # ipv6 = get_addrs(db.get('exterior_ifname'), AF_INET6, 0)[0]
-    ipv6 = None
-    if ipv6:
-        logging.info('Using %s as exterior IPv6 address.', ipv6)
-        db.set('exterior_ipv6', ipv6)
-
     # By Kirale convention, interior MAC address is obtained from the dongle
     # serial
     serial = db.get('dongle_serial').split('+')[-1]

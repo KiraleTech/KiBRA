@@ -1,5 +1,6 @@
 import asyncio
 import http.server
+import ipaddress
 import json
 import logging
 import os
@@ -7,11 +8,11 @@ import socket
 import socketserver
 import sys
 import time
-import xml.etree.ElementTree
 import urllib
-import zeroconf
+import xml.etree.ElementTree
 
 import kibra.database as db
+import zeroconf
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
@@ -184,6 +185,7 @@ def start():
     service = zeroconf.ServiceInfo(
         type_=type_,
         name='%s.%s' % (name, type_),
+        address=ipaddress.IPv4Address(db.get('exterior_ipv4')).packed,
         port=WEB_PORT,
         properties=props)
     ANNOUNCER.register_service(service)

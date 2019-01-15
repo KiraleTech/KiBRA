@@ -19,7 +19,7 @@ from kibra.dns import DNS
 from kibra.ktask import status
 from kibra.mdns import MDNS
 from kibra.nat import NAT
-from kibra.network import NETWORK
+from kibra.network import global_netconfig, NETWORK
 from kibra.ksh import enable_ecm, SERIAL
 
 PID_FILE = '/tmp/kibra.pid'
@@ -77,6 +77,9 @@ def _main():
 
     # Load database
     db.load()
+    
+    # Exterior network configuration
+    global_netconfig()
 
     # Find connected dongle
     enable_ecm()
