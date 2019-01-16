@@ -44,7 +44,7 @@ def global_netconfig():
             prefix = _get_ula()
             logging.info('Generated the ULA prefix %s.' % prefix)
         db.set('prefix', prefix)
-        
+
     # Detect exterior interface addresses
     ipv4 = get_addrs(db.get('exterior_ifname'), AF_INET, 0)[0]
     if ipv4:
@@ -84,10 +84,12 @@ def get_eui48(ifnumber):
     '''Get EUI48 address for the interface'''
     return IPR.link('get', index=ifnumber)[0].get_attr('IFLA_ADDRESS')
 
+
 def get_eui64(ifnumber):
     eui48 = get_eui48(ifnumber)
     octets = eui48.split(':')
     return ':'.join(octets[0:3] + ['ff', 'fe'] + octets[3:6])
+
 
 def get_addrs(ifname, family, scope=None):
     '''Get an address for the interface'''
@@ -123,8 +125,11 @@ def set_ext_iface():
         index = def_routes[0].get_attr('RTA_OIF')
         links = IPR.get_links(index)
         db.set('exterior_ifname', links[0].get_attr('IFLA_IFNAME'))
+    # Set exterior index
     idx = IPR.link_lookup(ifname=db.get('exterior_ifname'))[0]
     db.set('exterior_ifnumber', idx)
+    # Set exterior MAC
+    db.set('exterior_mac', IPR.get_links(index)[0].get_attr('IFLA_ADDRESS'))
 
 
 def dongle_conf():
