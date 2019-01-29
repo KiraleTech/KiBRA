@@ -45,16 +45,32 @@ def global_netconfig():
             logging.info('Generated the ULA prefix %s.' % prefix)
         db.set('prefix', prefix)
 
-    # Detect exterior interface addresses
-    ipv4 = get_addrs(db.get('exterior_ifname'), AF_INET, 0)[0]
-    if ipv4:
-        logging.info('Using %s as exterior IPv4 address.', ipv4)
-        db.set('exterior_ipv4', ipv4)
-    # ipv6 = get_addrs(db.get('exterior_ifname'), AF_INET6, 0)[0]
-    ipv6 = None
-    if ipv6:
-        logging.info('Using %s as exterior IPv6 address.', ipv6)
-        db.set('exterior_ipv6', ipv6)
+    # Find exterior interface addresses
+    # Global IPv4 addresses
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=0)
+    if ipv4_addrs:
+        logging.info('Using %s as exterior IPv4 address.', ipv4_addrs[0])
+        db.set('exterior_ipv4', ipv4_addrs[0])
+
+    # Link-local IPv4 addresses
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=253)
+    if ipv4_addrs:
+        logging.info('Using %s as exterior IPv4 link-local address.',
+                     ipv4_addrs[0])
+        db.set('exterior_ipv4_ll', ipv4_addrs[0])
+
+    # Global IPv6 addresses
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=0)
+    if ipv6_addrs:
+        logging.info('Using %s as exterior IPv6 address.', ipv6_addrs[0])
+        db.set('exterior_ipv6', ipv6_addrs[0])
+
+    # Link-local IPv6 addresses
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=253)
+    if ipv6_addrs:
+        logging.info('Using %s as exterior link-local IPv6 address.',
+                     ipv6_addrs[0])
+        db.set('exterior_ipv6_ll', ipv6_addrs[0])
 
 
 def _get_ula():
@@ -99,37 +115,26 @@ def get_addrs(ifname, family, scope=None):
     for addr in IPR.get_addr(index=idx, family=family, scope=scope):
         addrs.append(addr.get_attr('IFA_ADDRESS'))
     return addrs
-    '''
-    # No configured address found, try DHCP
-    if family == AF_INET:
-        logging.info('No IPv4 addresses found, trying to obtain one via DHCP.')
-        leases_file = '%sleases-ip4-%s' % (db.CFG_PATH, ifname)
-        bash('dhclient -4 -lf %s %s 2> /dev/null' % (leases_file, ifname))
-    if family == AF_INET6:
-        logging.info('No IPv6 addresses found, trying to obtain one via DHCP.')
-        leases_file = '%sleases-ip6-%s' % (db.CFG_PATH, ifname)
-        bash('dhclient -6 -lf %s %s 2> /dev/null' % (leases_file, ifname))
-    raw_addrs = IPR.get_addr(family=family, scope=0, index=idx)
-    if raw_addrs:
-        addr = raw_addrs[0].get_attr('IFA_ADDRESS')
-        return addr
-    '''
 
 
 def set_ext_iface():
-    '''Return the name of the interface with the default IPv4 route'''
-    if not db.has_keys(['exterior_ifname']):
-        def_routes = IPR.get_default_routes(AF_INET)
-        if not def_routes:
-            raise Exception('No external interfaces found.')
-        index = def_routes[0].get_attr('RTA_OIF')
-        links = IPR.get_links(index)
-        db.set('exterior_ifname', links[0].get_attr('IFLA_IFNAME'))
+    '''Select the first non local non Kirale as external interface'''
+
+    if not db.get('exterior_ifname'):
+        links = IPR.get_links()
+        for link in links:
+            link_mac = link.get_attr('IFLA_ADDRESS')
+            if not link_mac.startswith('00:00:00') and not link_mac.startswith(
+                    '84:04:d2'):
+                db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
+                break
+
     # Set exterior index
     idx = IPR.link_lookup(ifname=db.get('exterior_ifname'))[0]
     db.set('exterior_ifnumber', idx)
+
     # Set exterior MAC
-    db.set('exterior_mac', IPR.get_links(index)[0].get_attr('IFLA_ADDRESS'))
+    db.set('exterior_mac', IPR.get_links(idx)[0].get_attr('IFLA_ADDRESS'))
 
 
 def dongle_conf():

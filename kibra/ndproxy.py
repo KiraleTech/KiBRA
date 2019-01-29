@@ -200,8 +200,8 @@ class NDProxy():
         # Send ICMPv6 packet
         try:
             self.icmp6_sock.sendto(header + opts, (dst, 0, 0, idx))
-        except:
-            logging.warn('Cannot send NA to %s' % dst)
+        except Exception as exc:
+            logging.warn('Cannot send NA to %s. Error: %s' % (dst, exc))
 
         # Logging
         logging.info('out na to %s for %s' % (dst, tgt))

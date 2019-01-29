@@ -6,6 +6,7 @@ import logging
 import os
 import socket
 import socketserver
+import struct
 import sys
 import time
 import urllib
@@ -18,13 +19,16 @@ from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
 from kibra.shell import bash
 
+BBR_HDP_ADDR = ('ff02::114', 12345)
 WEB_PORT = 80
-KIBRA_VERSION = '1.2.0'
+KIBRA_VERSION = '1.2.2'
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
 ANNOUNCER = None
 HTTPD = None
+
+IPPROTO_IPV6 = 41
 
 
 def _get_leases():
@@ -45,6 +49,10 @@ def _get_leases():
                     if node['expires'] > time.time():
                         leases['leases'].append(node)
     return leases
+
+
+class V6Server(socketserver.TCPServer):
+    address_family = socket.AF_INET6
 
 
 class WebServer(http.server.SimpleHTTPRequestHandler):
@@ -94,7 +102,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 size = req.get('sz', ['0'])[0]  # Zero size by default
                 hl = req.get('hl', ['255'])[0]  # Hop limit 255 by default
                 iface = db.get('exterior_ifname')
-                bash('ping -c1 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
+                bash('ping -c1 -W2 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
                 data = 'OK'
             elif self.path.startswith('/radvd'):
                 backhaul = req.get('bh')
@@ -163,6 +171,39 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class HDP_Announcer():
+    def __init__(self):
+        self.run = False
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        ifn = struct.pack('I', int(db.get('exterior_ifnumber')))
+        self.sock.setsockopt(IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, ifn)
+        group = socket.inet_pton(socket.AF_INET6, BBR_HDP_ADDR[0]) + ifn
+        self.sock.setsockopt(IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, group)
+
+        ll_addr = ('', BBR_HDP_ADDR[1], 0, 0)
+        try:
+            self.sock.bind(ll_addr)
+            self.run = True
+        except Exception as exc:
+            logging.error('Could not launch HDP Announcer. Error: %s' % exc)
+
+    def start(self, props):
+        while self.run:
+            request = self.sock.recvfrom(1024)
+            if request[0].decode() == 'BBR':
+                dst_addr = request[1][0]
+                dst_port = request[1][1]
+                logging.info('HDP request from %s' % dst_addr)
+                self.sock.sendto(
+                    json.dumps(props).encode(), (dst_addr, dst_port))
+
+    def stop(self):
+        self.run = False
+
+
 def start():
     global HTTPD, ANNOUNCER
 
@@ -171,28 +212,41 @@ def start():
         # The port may have not been closed from the previous session
         # TODO: properly close server when stopping app
         try:
-            HTTPD = socketserver.TCPServer(('', WEB_PORT), WebServer)
+            HTTPD = V6Server(('', WEB_PORT), WebServer)
         except OSError:
             time.sleep(1)
     asyncio.get_event_loop().run_in_executor(None, HTTPD.serve_forever)
-    print('Webserver is up.')
+    print('Webserver is up')
 
-    # Announce via mDNS
-    ANNOUNCER = zeroconf.Zeroconf()
-    type_ = '_bbr._tcp.local.'
-    name = 'Kirale-KiBRA %s' % int(time.time())
     props = {'ven': 'Kirale', 'mod': 'KiBRA', 'ver': KIBRA_VERSION}
-    service = zeroconf.ServiceInfo(
-        type_=type_,
-        name='%s.%s' % (name, type_),
-        address=ipaddress.IPv4Address(db.get('exterior_ipv4')).packed,
-        port=WEB_PORT,
-        properties=props)
-    ANNOUNCER.register_service(service)
-    print('%s service announced via mDNS' % name)
+    '''
+    # Announce via mDNS
+    ipv4_addr = db.get('exterior_ipv4')
+    if ipv4_addr:
+        ANNOUNCER = zeroconf.Zeroconf()
+        type_ = '_bbr._tcp.local.'
+        name = 'Kirale-KiBRA %s' % int(time.time())
+        service = zeroconf.ServiceInfo(
+            type_=type_,
+            name='%s.%s' % (name, type_),
+            address=ipaddress.IPv4Address(ipv4_addr).packed,
+            port=WEB_PORT,
+            properties=props)
+        ANNOUNCER.register_service(service)
+        print('%s service announced via mDNS' % name)
+    '''
+
+    # Announce via Harness Discovery Protocol
+    props['add'] = db.get('exterior_ipv6_ll')
+    props['por'] = WEB_PORT
+    ANNOUNCER = HDP_Announcer()
+    asyncio.get_event_loop().run_in_executor(None, ANNOUNCER.start, props)
+    print('BBR announced via HDP')
 
 
 def stop():
+    global ANNOUNCER
+
     print('Stopping web server...')
-    ANNOUNCER.close()
+    ANNOUNCER.stop()
     HTTPD.server_close()
