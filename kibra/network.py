@@ -16,7 +16,8 @@ DHCLIENT6_LEASES_FILE = '/var/lib/dhcp/dhclient6.leases'
 BR_TABLE_NR = 200
 IPR = pyroute2.IPRoute()
 
-IFF_UP = 0x0001
+IFF_UP = 0x1
+IFF_LOOPBACK = 0x8
 IFF_MULTICAST = 0x1000
 
 def get_prefix_based_mcast(prefix, groupid):
@@ -125,18 +126,17 @@ def set_ext_iface():
     if not db.get('exterior_ifname'):
         links = IPR.get_links()
         for link in links:
+            # Don't choose the loopback interface
+            if link['flags'] & IFF_LOOPBACK:
+                continue
             # Must be up
             if not link['flags'] & IFF_UP:
                 continue
             # Must have multicast enabled
             if not link['flags'] & IFF_MULTICAST:
                 continue
-            link_mac = link.get_attr('IFLA_ADDRESS')
-            # Don't allow link local
-            if link_mac.startswith('00:00:00'):
-                continue
             # Don't choose the Kirale's Thread device
-            if link_mac.startswith('84:04:d2'):
+            if link.get_attr('IFLA_ADDRESS').startswith('84:04:d2'):
                 continue
             # First interface matching all criteria is selected
             db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
