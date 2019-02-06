@@ -87,8 +87,6 @@ def _main():
     # Start web interface
     webserver.start()
 
-    loop = asyncio.get_event_loop()
-
     # Start subtasks
     TASKS.append(SERIAL())
     TASKS.append(NETWORK())
@@ -104,7 +102,7 @@ def _main():
 
     asyncio.ensure_future(_master())
 
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 
 
 if __name__ == '__main__':

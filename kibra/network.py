@@ -123,6 +123,9 @@ def set_ext_iface():
     if not db.get('exterior_ifname'):
         links = IPR.get_links()
         for link in links:
+            # Must have multicast enabled
+            if not link['flags'] & 0x8000:
+                continue
             link_mac = link.get_attr('IFLA_ADDRESS')
             if not link_mac.startswith('00:00:00') and not link_mac.startswith(
                     '84:04:d2'):
