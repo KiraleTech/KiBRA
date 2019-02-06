@@ -16,6 +16,8 @@ DHCLIENT6_LEASES_FILE = '/var/lib/dhcp/dhclient6.leases'
 BR_TABLE_NR = 200
 IPR = pyroute2.IPRoute()
 
+IFF_UP = 0x0001
+IFF_MULTICAST = 0x1000
 
 def get_prefix_based_mcast(prefix, groupid):
     '''RFC 3306'''
@@ -118,19 +120,31 @@ def get_addrs(ifname, family, scope=None):
 
 
 def set_ext_iface():
-    '''Select the first non local non Kirale as external interface'''
+    '''Select the right external interface'''
 
     if not db.get('exterior_ifname'):
         links = IPR.get_links()
         for link in links:
+            # Must be up
+            if not link['flags'] & IFF_UP:
+                continue
             # Must have multicast enabled
-            if not link['flags'] & 0x8000:
+            if not link['flags'] & IFF_MULTICAST:
                 continue
             link_mac = link.get_attr('IFLA_ADDRESS')
-            if not link_mac.startswith('00:00:00') and not link_mac.startswith(
-                    '84:04:d2'):
-                db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
-                break
+            # Don't allow link local
+            if link_mac.startswith('00:00:00'):
+                continue
+            # Don't choose the Kirale's Thread device
+            if link_mac.startswith('84:04:d2'):
+                continue
+            # First interface matching all criteria is selected
+            db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
+            break
+        
+    # No appropiate interface was found
+    if not db.get('exterior_ifname'):
+        raise Exception('No exterior interface available.')
 
     # Set exterior index
     idx = IPR.link_lookup(ifname=db.get('exterior_ifname'))[0]
