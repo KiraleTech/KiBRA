@@ -43,6 +43,7 @@ DB_ITEMS = {
     'bridging_mark': [int, None, lambda x: True, False, False],
     'bridging_table': [str, None, lambda x: True, False, False],
     'dhcp_pool': [str, None, lambda x: True, False, False],
+    'discovered': [int, 0, lambda x: x in (0, 1), True, False],
     'dongle_channel': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, None, lambda x: True, True, True],
     'dongle_eid': [str, None, lambda x: True, False, False],

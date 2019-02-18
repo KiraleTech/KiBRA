@@ -98,9 +98,6 @@ def _dongle_apply_config():
     logging.info('Set dongle as %s.', role)
     send_cmd('config role %s' % role)
 
-    # Enable Thread 1.2
-    send_cmd('config thver 3')
-
 
 def _configure():
     global SERIAL_DEV
@@ -119,7 +116,8 @@ def _configure():
 
     # Different actions according to dongle status
     if dongle_status == 'none':
-        _dongle_apply_config()
+        if db.get('discovered') == 0:
+            _dongle_apply_config()
         _enable_br()
         send_cmd('ifup')
         _configure()

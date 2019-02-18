@@ -3,7 +3,6 @@
 
 import asyncio
 import argparse
-import asyncio
 import daemonize
 import logging
 from time import sleep
@@ -85,6 +84,7 @@ def _main():
     enable_ecm()
 
     # Start web interface
+    db.set('discovered', 0)
     webserver.start()
 
     # Start subtasks

@@ -105,25 +105,27 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 bash('ping -c1 -W2 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
                 data = 'OK'
             elif self.path.startswith('/radvd'):
+                off = req.get('off')
                 backhaul = req.get('bh')
                 domain = req.get('dm')
-                if not backhaul or not domain:
+                if off:
+                    bash('service radvd stop')
+                elif backhaul and domain:
+                    if not db.get('exterior_ifname'):
+                        set_ext_iface()
+                    with open('/etc/radvd.conf', 'w') as file_:
+                        file_.write(
+                            'interface %s {\n' % db.get('exterior_ifname'))
+                        file_.write('  AdvSendAdvert on;\n')
+                        file_.write('  prefix %s { AdvAutonomous on; };\n' %
+                                    backhaul[0])
+                        file_.write('  prefix %s { AdvAutonomous off; };\n' %
+                                    domain[0])
+                        file_.write('};\n')
+                        bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
+                        bash('service radvd restart')
+                else:
                     return
-                if not db.get('exterior_ifname'):
-                    set_ext_iface()
-                with open('/etc/radvd.conf', 'w') as file_:
-                    file_.write('interface %s {\n' % db.get('exterior_ifname'))
-                    file_.write('  AdvSendAdvert on;\n')
-                    file_.write(
-                        '  prefix %s { AdvAutonomous on; };\n' % backhaul[0])
-                    file_.write(
-                        '  prefix %s { AdvAutonomous off; };\n' % domain[0])
-                    file_.write('};\n')
-                    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
-                    bash('service radvd restart')
-                data = 'OK'
-            elif self.path == '/reboot':
-                bash('shutdown -r +2')  # Reboot after 2 seconds
                 data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
@@ -194,6 +196,7 @@ class HDP_Announcer():
         while self.run:
             request = self.sock.recvfrom(1024)
             if request[0].decode() == 'BBR':
+                db.set('discovered', 1)
                 dst_addr = request[1][0]
                 dst_port = request[1][1]
                 logging.info('HDP request from %s' % dst_addr)
