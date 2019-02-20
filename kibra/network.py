@@ -341,7 +341,7 @@ def _ifdown():
 
     # Bring interior interface down
     logging.info('Bringing %s interface down.', db.get('interior_ifname'))
-    IPR.link('set', index=idx[0], state='down')
+    IPR.link('set', index=db.get('interior_ifnumber'), state='down')
 
 
 def dongle_route_enable(prefix):

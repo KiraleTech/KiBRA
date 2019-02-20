@@ -90,6 +90,7 @@ class MDNS(Ktask):
         props = {
             'rv': '1',
             'tv': '1.2.0',
+            # TODO: bit 7: BBR on, bit 9: pri/sec
             'sb': bytes([0, 0, 0, 0x82]),
             'nn': db.get('dongle_netname'),
             'xp': bytes.fromhex(db.get('dongle_xpanid').replace('0x', '')),

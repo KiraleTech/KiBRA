@@ -122,8 +122,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                         file_.write('  prefix %s { AdvAutonomous off; };\n' %
                                     domain[0])
                         file_.write('};\n')
-                        bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
-                        bash('service radvd restart')
+                    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
+                    bash('service radvd restart')
                 else:
                     return
                 data = 'OK'
