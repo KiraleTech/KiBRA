@@ -12,6 +12,7 @@ import time
 import urllib
 import xml.etree.ElementTree
 
+import kibra
 import kibra.database as db
 import zeroconf
 from kibra.diags import DIAGS_DB
@@ -21,7 +22,6 @@ from kibra.shell import bash
 
 BBR_HDP_ADDR = ('ff02::114', 12345)
 WEB_PORT = 80
-KIBRA_VERSION = '1.2.2'
 PUBLIC_DIR = os.path.dirname(sys.argv[0]) + '/public'
 LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
@@ -221,7 +221,7 @@ def start():
     asyncio.get_event_loop().run_in_executor(None, HTTPD.serve_forever)
     print('Webserver is up')
 
-    props = {'ven': 'Kirale', 'mod': 'KiBRA', 'ver': KIBRA_VERSION}
+    props = {'ven': 'Kirale', 'mod': 'KiBRA', 'ver': kibra.__version__}
     '''
     # Announce via mDNS
     ipv4_addr = db.get('exterior_ipv4')

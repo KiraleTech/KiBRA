@@ -5,11 +5,10 @@ https://packaging.python.org/en/latest/distributing.html
 https://github.com/pypa/sampleproject
 '''
 
-# To use a consistent encoding
 from codecs import open as copen
 from os import path
 
-# Always prefer setuptools over distutils
+import kibra
 from setuptools import setup
 
 # Get the long description from the README file
@@ -20,7 +19,7 @@ with copen(path.join(HERE, 'README.rst'), encoding='utf-8') as _file:
 setup(
     name='kibra',
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.2.2',
+    version=kibra.__version__,
     description='Kirale Border Router Administration',
     long_description=LONG_DESC,
     # The project's main homepage.
