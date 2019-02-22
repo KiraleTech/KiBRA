@@ -1,4 +1,3 @@
 #!/bin/bash
-cd /root/py35env
-source bin/activate
-python -m kibra
+source /opt/kirale/pyenv/bin/activate
+/opt/kirale/pyenv/bin/python -m kibra

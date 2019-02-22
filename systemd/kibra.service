@@ -6,8 +6,9 @@ After=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root
+WorkingDirectory=/tmp
 ExecStart=/opt/kirale/kibra.sh
+ExecStop=/bin/kill -HUP $MAINPID
 
 [Install]
 WantedBy=multi-user.target
