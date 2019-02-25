@@ -246,14 +246,9 @@ class DIAGS(Ktask):
     def _parse_active_dataset(self, payload):
         # No response to /c/ag
         if payload is None or b'':
-            db.set('bagent_tis', 0)
-            db.set('bagent_cm', 0)
+            db.set('dongle_secpol', '0')
         # Response present
         else:
-            # If the BR is not a REED and responds to /c/ag, TIS=2
-            if self.br_rloc16[-2] is '00':
-                db.set('bagent_tis', 2)
-            # Update other parameters
             value = ThreadTLV.get_value(payload, TLV.C_CHANNEL)
             if value:
                 db.set('dongle_channel', int(value[2]))
@@ -276,15 +271,11 @@ class DIAGS(Ktask):
                 prefix_addr = ipaddress.IPv6Address(prefix_bytes)
                 db.set('dongle_prefix', prefix_addr.compressed + '/64')
             value = ThreadTLV.get_value(payload, TLV.C_ACTIVE_TIMESTAMP)
-            if value:
-                db.set('bagent_at', ''.join('%02x' % byte for byte in value))
             value = ThreadTLV.get_value(payload, TLV.C_SECURITY_POLICY)
             if value:
-                db.set('bagent_cm', (value[2] >> 2) & 0x01)
+                db.set('dongle_secpol', value.hex())
 
     def _parse_net_data(self, tlvs):
-        sub_tlvs = []
-
         value = ThreadTLV.get_value(tlvs, TLV.D_NETWORK_DATA)
         if value:
             for tlv in ThreadTLV.sub_tlvs(value):

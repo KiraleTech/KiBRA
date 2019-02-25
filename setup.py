@@ -52,7 +52,7 @@ setup(
     include_package_data=True,
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'kitools', 'bash', 'pyroute2', 'aiocoap==0.4a1', 'zeroconf', 'daemonize'
+        'kitools', 'bash', 'pyroute2', 'aiocoap==0.4a1'
     ],
     entry_points={'console_scripts': ['kibra = kibra.__main__:main']},
 )

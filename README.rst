@@ -60,10 +60,10 @@ Debian Buster and Raspbian Buster systems, but it will probably run correctly
 in many other GNU/Linux distributions.
 
 The required system packages are: ``dibbler-server``, ``iproute2``,
-``ip6tables``, ``jool``, ``ntp`` and ``unbound``.
+``ip6tables``, ``jool``, ``ntp``, ``radvd`` and ``unbound``.
 
-The required Python modules are: ``aiocoap``, ``bash``, ``kitools``,
-``pycryptodomex``, ``pyroute2`` and ``zeroconf``.
+The required Python modules are: ``aiocoap``, ``bash``, ``kitools`` and 
+``pyroute2``.
 
 Installation
 ============
