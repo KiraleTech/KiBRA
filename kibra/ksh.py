@@ -297,7 +297,6 @@ class SERIAL(Ktask):
             self,
             name='serial',
             start_keys=['dongle_serial'],
-            #stop_tasks=['nat', 'diags'],
             stop_tasks=['diags'],
             period=2)
 
@@ -306,10 +305,10 @@ class SERIAL(Ktask):
         _configure()
         _dongle_get_config()
         bbr_dataset_update()
-        # _bagent_on()
+        _bagent_on()
 
     def kstop(self):
-        # _bagent_off()
+        _bagent_off()
         send_cmd('ifdown')
 
     async def periodic(self):

@@ -340,16 +340,16 @@ class DUAHandler():
                 entry.dad = False
 
     def announce(self, entry):
+        # Send PRO_BB.ntf (9.4.8.4.4)
+        asyncio.ensure_future(
+            DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'),
+                                  entry.dua))
+
         # Add ND Proxy neighbor
         self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
 
         # Send unsolicited NA
         self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
-
-        # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(
-            DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'),
-                                  entry.dua))
 
         # TODO: save entries to database
 
