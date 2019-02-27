@@ -14,7 +14,6 @@ import xml.etree.ElementTree
 
 import kibra
 import kibra.database as db
-import zeroconf
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
@@ -221,24 +220,11 @@ def start():
     asyncio.get_event_loop().run_in_executor(None, HTTPD.serve_forever)
     print('Webserver is up')
 
-    props = {'ven': 'Kirale', 'mod': 'KiBRA', 'ver': kibra.__version__}
-    '''
-    # Announce via mDNS
-    ipv4_addr = db.get('exterior_ipv4')
-    if ipv4_addr:
-        ANNOUNCER = zeroconf.Zeroconf()
-        type_ = '_bbr._tcp.local.'
-        name = 'Kirale-KiBRA %s' % int(time.time())
-        service = zeroconf.ServiceInfo(
-            type_=type_,
-            name='%s.%s' % (name, type_),
-            address=ipaddress.IPv4Address(ipv4_addr).packed,
-            port=WEB_PORT,
-            properties=props)
-        ANNOUNCER.register_service(service)
-        print('%s service announced via mDNS' % name)
-    '''
-
+    props = {
+        'ven': db.get('kibra_vendor'),
+        'mod': db.get('kibra_model'),
+        'ver': db.get('kibra_version')
+    }
     # Announce via Harness Discovery Protocol
     props['add'] = db.get('exterior_ipv6_ll')
     props['por'] = WEB_PORT
