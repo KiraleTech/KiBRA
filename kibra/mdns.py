@@ -7,9 +7,6 @@ import kibra.database as db
 from kibra.ktask import Ktask
 from kibra.shell import bash
 
-VENDOR_NAME = 'KiraleTechnologies'
-DEVICE_NAME = 'KTBRN1'
-
 MDNS_CONFIG = '/etc/avahi/avahi-daemon.conf'
 MDNS_HOSTS = '/etc/avahi/hosts'
 MDNS_SERVICES = '/etc/avahi/services'
@@ -98,7 +95,7 @@ def get_records():
     else:
         status = IFACE_OFF
         if mode == DTLS_PSKC:
-            records['nn'] = DEVICE_NAME
+            records['nn'] = db.get('kibra_model')
             # TODO: sha256
             records['xp'] = db.get('dongle_eui64')
 
@@ -115,8 +112,8 @@ def get_records():
             bitmap |= 1 << BBR_PRIMARY
     
     records['sb'] = struct.pack('!I', bitmap).hex()
-    records['vn'] = VENDOR_NAME
-    records['mn'] = DEVICE_NAME
+    records['vn'] = db.get('kibra_vendor')
+    records['mn'] = db.get('kibra_model')
     records['sq'] = struct.pack('!I', db.get('bbr_seq')).hex()
     records['bb'] = struct.pack('!H', db.get('bbr_port')).hex()
 

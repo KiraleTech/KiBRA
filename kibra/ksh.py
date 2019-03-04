@@ -1,14 +1,18 @@
 import logging
+import os
+import importlib_resources
 import struct
 import time
 
-from kitools import kiserial
-
+import kibra
 import kibra.database as db
 from kibra.ktask import Ktask
 from kibra.network import dongle_conf
-from kibra.tlv import ThreadTLV
 from kibra.thread import TLV
+from kibra.tlv import ThreadTLV
+from kitools import kidfu, kifwu, kiserial
+
+NCP_FW_FOLDER = 'kibra.ncp_fw'
 
 SERIAL_DEV = None
 
@@ -36,7 +40,46 @@ def _find_device(snum):
     logging.warn('No KiNOS devices found.')
 
 
-def enable_ecm():
+def ncp_fw_update(current_fw):
+    '''
+    Compare the NCP firmware with the one available in the 'ncp_fiwmare' folder 
+    and update if needed
+    '''
+
+    # No need to continue if NCP fw version is up to date
+    if kibra.__kinosver__ in current_fw:
+        logging.info('NCP firmware is up to date.')
+        return
+    logging.info('NCP needs a firmware update.')
+
+    # Find the DFU file that matches the required fw version
+    dfu_file = None
+    ver_num = kibra.__kinosver__.split(' v')[-1]
+    for file_name in importlib_resources.contents(NCP_FW_FOLDER):
+        if ver_num in file_name:
+            # TODO: This relies on the file name, we could also check the file 
+            # contents to make sure
+            dfu_file = file_name
+            break
+    if not dfu_file:
+        logging.error('Required NCP firmware not present.')
+        return
+    
+    # Flash the NCP and re-enable it
+    with importlib_resources.path(NCP_FW_FOLDER, dfu_file) as dfu_path:
+        logging.warn('NCP will be updated with firmware v%s' % ver_num)
+        try:
+            dfu_file = kidfu.DfuFile(str(dfu_path))
+            kifwu.dfu_find_and_flash(dfu_file, unattended=True)
+        except Exception as exc:
+            logging.error('Problem updating NCP firmware: %s' % exc)
+            return
+    logging.info('NCP updated successfully.')
+
+    # Find the NCP again
+    enable_ncp()
+
+def enable_ncp():
     '''Find the device and initialize the port'''
     global SERIAL_DEV
 
@@ -51,7 +94,8 @@ def enable_ecm():
     send_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
 
     # Save serial number
-    db.set('dongle_serial', send_cmd('show snum')[0])
+    serial = send_cmd('show snum')[0]
+    db.set('dongle_serial', serial)
 
     # Enable ECM if not enabled
     if 'off' in send_cmd('show hwconfig')[3]:
@@ -60,7 +104,10 @@ def enable_ecm():
         send_cmd('reset')
         time.sleep(0.5)
         del SERIAL_DEV
-        enable_ecm()
+        enable_ncp()
+
+    # Update the NCP firmware if needed
+    ncp_fw_update(send_cmd('show swver')[-1])
 
 
 def _dongle_apply_config():

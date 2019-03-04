@@ -1,25 +1,25 @@
 #!/usr/bin/python3
 '''Kirale Border Router Administration'''
 
-import asyncio
 import argparse
-import daemonize
+import asyncio
 import logging
 from time import sleep
 
+import daemonize
+import kibra
 from kibra import database as db
 from kibra import topology as topology
 from kibra import webserver as webserver
 from kibra.coapserver import COAPSERVER
-
 from kibra.dhcp import DHCP
 from kibra.diags import DIAGS
 from kibra.dns import DNS
+from kibra.ksh import SERIAL, enable_ncp
 from kibra.ktask import status
 from kibra.mdns import MDNS
 from kibra.nat import NAT
-from kibra.network import global_netconfig, NETWORK
-from kibra.ksh import enable_ecm, SERIAL
+from kibra.network import NETWORK, global_netconfig
 
 PID_FILE = '/tmp/kibra.pid'
 
@@ -76,12 +76,15 @@ def _main():
 
     # Load database
     db.load()
+    db.set('kibra_vendor', kibra.__vendor__)
+    db.set('kibra_model', kibra.__model__)
+    db.set('kibra_version', 'KiBRA v%s' % kibra.__version__)
     
     # Exterior network configuration
     global_netconfig()
 
     # Find connected dongle
-    enable_ecm()
+    enable_ncp()
 
     # Start web interface
     db.set('discovered', 0)
