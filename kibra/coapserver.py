@@ -28,6 +28,7 @@ IP = IPRoute()
 DUA_HNDLR = None
 MCAST_HNDLR = None
 
+COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
 
 class DMStatus():
     # Defined statuses
@@ -51,6 +52,7 @@ class DUAEntry():
     def update(self, elapsed):
         self.reg_time = datetime.datetime.now().timestamp() - elapsed
 
+
 class MulticastHandler():
     def __init__(self):
         # Volatile multicast addresses list
@@ -63,7 +65,7 @@ class MulticastHandler():
 
         # Start the multicast routing daemon
         self.mcrouter = MCRouter()
-    
+
     def stop(self):
         self.mcrouter.stop()
 
@@ -207,7 +209,7 @@ class DUAHandler():
 
         # Start the ND Proxy daemon
         self.ndproxy = NDProxy()
-    
+
     def stop(self):
         self.ndproxy.stop()
 
@@ -365,6 +367,7 @@ class DUAHandler():
         self.ndproxy.add_del_dua('del', entry.dua)
         self.entries.remove(entry)
 
+
 class Res_N_DR(resource.Resource):
     '''DUA registration, Thread 1.2 5.23'''
 
@@ -388,7 +391,7 @@ class Res_N_DR(resource.Resource):
             value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
             if value:
                 eid = value.hex()
-            
+
             # Target EID TLV
             value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
             if value:
@@ -397,9 +400,10 @@ class Res_N_DR(resource.Resource):
                     dua = ipaddress.IPv6Address(req_dua).compressed
                 except:
                     status = DMStatus.ST_INV_ADDR
-            
+
             # Time Since Last Transaction TLV
-            value = ThreadTLV.get_value(request.payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
+            value = ThreadTLV.get_value(request.payload,
+                                        TLV.A_TIME_SINCE_LAST_TRANSACTION)
             if value:
                 elapsed = struct.unpack('!I', value)[0]
 
@@ -430,7 +434,7 @@ class Res_B_BMR(resource.Resource):
 
         # Primary BBR shouldn't receive this message
         if not 'primary' in db.get('bbr_status'):
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # IPv6 Addresses TLV
         addrs = []
@@ -445,20 +449,25 @@ class Res_B_BMR(resource.Resource):
         if addrs and timeout:
             MCAST_HNDLR.reg_update(addrs, timeout)
 
-        return aiocoap.message.NoResponse
+        return COAP_NO_RESPONSE
 
 
 class Res_B_BQ(resource.Resource):
     '''Backbone Query, Thread 1.2 9.4.8.4.2'''
 
     async def render_post(self, request):
+        # Filter own generated messages
+        src_addr =request.remote.sockaddr[0]
+        if src_addr.split('%')[0] in db.get('exterior_ipv6_ll'):
+            return COAP_NO_RESPONSE
+
         # Incoming TLVs parsing
         logging.info('in %s qry: %s' %
                      (URI.B_BQ, ThreadTLV.sub_tlvs_str(request.payload)))
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         dua = None
         value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
@@ -467,14 +476,13 @@ class Res_B_BQ(resource.Resource):
         rloc16 = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
 
         if not dua:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Send BB.ans to the requester
         asyncio.ensure_future(
-            DUA_HNDLR.send_bb_ans(aiocoap.CON, request.remote.sockaddr[0], dua,
-                                  rloc16))
+            DUA_HNDLR.send_bb_ans(aiocoap.CON, src_addr, dua, rloc16))
 
-        return aiocoap.message.NoResponse
+        return COAP_NO_RESPONSE
 
 
 class Res_B_BA(resource.Resource):
@@ -487,7 +495,7 @@ class Res_B_BA(resource.Resource):
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         dua = None
         rloc16 = None
@@ -503,7 +511,8 @@ class Res_B_BA(resource.Resource):
         value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
         if value:
             eid = value.hex()
-        value = ThreadTLV.get_value(request.payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
+        value = ThreadTLV.get_value(request.payload,
+                                    TLV.A_TIME_SINCE_LAST_TRANSACTION)
         if value:
             elapsed = struct.unpack('!I', value)[0]
         value = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
@@ -540,11 +549,12 @@ class Res_B_BA(resource.Resource):
             if rloc16 == bbr_rloc16:
                 dst = db.get('dongle_ll')
             else:
-                dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
+                dst = NETWORK.get_rloc_from_short(
+                    db.get('dongle_prefix'), rloc16)
             asyncio.ensure_future(
                 DUA_HNDLR.send_bb_ans(aiocoap.CON, dst, dua, eid, bbr_rloc16))
 
-        return aiocoap.message.NoResponse
+        return COAP_NO_RESPONSE
 
 
 class Res_A_AQ(resource.Resource):
@@ -557,7 +567,7 @@ class Res_A_AQ(resource.Resource):
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Find sub TLVs
         dua = None
@@ -565,19 +575,19 @@ class Res_A_AQ(resource.Resource):
         if value:
             dua = ipaddress.IPv6Address(bytes(value))
         if not dua:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Don't process requests for different prefixes than DUA
         dua_prefix = ipaddress.IPv6Address(db.get('dua_prefix').split('/')[0])
         if dua.packed[:8] != dua_prefix.packed[:8]:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # See if this DUA is registered by this BBR
         eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
 
         # If the DUA is registered, the owner will respond to the query
         if eid and not dad:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Obtain the RLOC16 from the source's RLOC
         rloc16 = ipaddress.IPv6Address(request.remote.sockaddr[0]).packed[-2:]
@@ -586,7 +596,7 @@ class Res_A_AQ(resource.Resource):
         # Propagate Address Query to the Backbone
         await DUA_HNDLR.send_bb_query(dua, rloc16)
 
-        return aiocoap.message.NoResponse
+        return COAP_NO_RESPONSE
 
 
 class Res_A_AE(resource.Resource):
@@ -599,7 +609,7 @@ class Res_A_AE(resource.Resource):
 
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Find sub TLVs
         dua = None
@@ -611,19 +621,19 @@ class Res_A_AE(resource.Resource):
         if value:
             eid = value.hex()
         if not dua or not eid:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Don't process notifications for different prefixes than DUA
         dua_prefix = ipaddress.IPv6Address(db.get('dua_prefix').split('/')[0])
         if dua.packed[:8] != dua_prefix.packed[:8]:
-            return aiocoap.message.NoResponse
+            return COAP_NO_RESPONSE
 
         # Remove entry if it's registered with different EID
         entry_eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
         if not dad and entry_eid != eid:
             DUA_HNDLR.remove_entry(dua=dua)
 
-        return aiocoap.message.NoResponse
+        return COAP_NO_RESPONSE
 
 
 class CoapServer():
@@ -703,8 +713,10 @@ class COAPSERVER(Ktask):
             resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
         logging.info('Launching CoAP Server in BB port')
         self.server_bb = CoapServer(
+            # TODO: bind Res_B_BMR to all_network_bbrs
+            # TODO: bind Res_B_BQ to all_domain_bbrs
             # TODO: bind Res_B_BA to exterior link-local
-            addr=all_network_bbrs,
+            addr='::',
             port=db.get('bbr_port'),
             resources=[(URI.tuple(URI.B_BMR), Res_B_BMR()),
                        (URI.tuple(URI.B_BQ), Res_B_BQ()),
@@ -751,7 +763,7 @@ class COAPSERVER(Ktask):
             logging.info('Leaving Realm-Local All-Routers group: ff03::2')
             MCAST_HNDLR.mcrouter.join_leave_group('leave', 'ff03::2',
                                                   db.get('interior_ifnumber'))
-        
+
         logging.info('Stopping Multicast handler')
         MCAST_HNDLR.stop()
         logging.info('Stopping DUA handler')
