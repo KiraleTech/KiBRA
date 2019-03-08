@@ -16,6 +16,7 @@ import struct
 import time
 
 import kibra.database as db
+import kibra.iptables as iptables
 
 MCROUTE_EXPIRY = 60
 
@@ -214,11 +215,18 @@ class MCRouter():
     def join_leave_group(self, action, mcgroup, ifnumber=None):
         '''Join or leave a multicast group'''
         if action == 'join':
-            action_ = IPV6_JOIN_GROUP
+            socket_action = IPV6_JOIN_GROUP
+            iptables_action = 'I'
         else:
-            action_ = IPV6_LEAVE_GROUP
+            socket_action = IPV6_LEAVE_GROUP
+            iptables_action = 'D'
+
+        # Prevent the reception of own generated multicast
+        iptables.block_local_multicast(iptables_action, mcgroup)
+
+        # Add socket option
         mcgroup = ipaddress.IPv6Address(mcgroup).packed
         if ifnumber is None:
             ifnumber = db.get('exterior_ifnumber')
         msg = struct.pack('16sI', mcgroup, ifnumber)
-        self.mc6g_sock.setsockopt(IPPROTO_IPV6, action_, msg)
+        self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, msg)

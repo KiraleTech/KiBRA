@@ -135,3 +135,15 @@ def handle_diag(action):
     bash('ip6tables -w -t mangle -' + action + ' OUTPUT -o lo -d ' +
          db.get('dongle_rloc') + ' -p udp --dport ' + str(DEFS.PORT_MM) +
          ' -j MARK --set-mark "' + str(db.get('bridging_mark')) + '"')
+
+
+def block_local_multicast(action, maddr):
+    src = db.get('exterior_ipv6_ll')
+    if action is 'I':
+        logging.info('Blocking local traffic to %s' % maddr)
+    elif action is 'D':
+        logging.info('Unblocking local traffic to %s' % maddr)
+    else:
+        return
+    bash('ip6tables -w -t filter -%s INPUT -s %s -d %s -j DROP' % (action, src,
+                                                                   maddr))
