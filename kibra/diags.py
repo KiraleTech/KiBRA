@@ -44,7 +44,7 @@ class DIAGS(Ktask):
             name='diags',
             start_keys=['dongle_ll', 'interior_ifname'],
             start_tasks=['serial', 'network'],
-            period=3)
+            period=1)
         self.petitioner = CoapClient()
         self.br_rloc16 = ''
         self.br_permanent_addr = ''
