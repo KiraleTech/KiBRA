@@ -369,7 +369,7 @@ class NETWORK(Ktask):
                 'dongle_rloc', 'interior_mac'
             ],
             start_tasks=['serial'],  # To obtain the latest dongle_rloc
-            stop_tasks=['diags'],
+            stop_tasks=['diags', 'coapserver'],
             period=2)
 
     def kstart(self):
