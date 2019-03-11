@@ -18,6 +18,7 @@ class ThreadTLV():
             raise Exception('Bad data.')
 
         self.type = int(self.data[0])
+        # TODO: extended length
         self.length = int(self.data[1])
         self.value = self.data[2:]
 

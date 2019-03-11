@@ -28,7 +28,23 @@ IP = IPRoute()
 DUA_HNDLR = None
 MCAST_HNDLR = None
 
-COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
+#COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
+COAP_NO_RESPONSE = None
+
+
+class CoapServer():
+    '''CoAP Server'''
+
+    def __init__(self, addr, port, resources):
+        root = aiocoap.resource.Site()
+        for res in resources:
+            root.add_resource(res[0], res[1])
+        self.task = asyncio.Task(
+            aiocoap.Context.create_server_context(root, bind=(addr, port)))
+
+    def stop(self):
+        self.task.cancel()
+
 
 class DMStatus():
     # Defined statuses
@@ -152,7 +168,7 @@ class Res_N_MR(resource.Resource):
         status = DMStatus.ST_UNSPEC
 
         # Incoming TLVs parsing
-        in_pload = ThreadTLV(data=request.payload)
+        in_pload = ThreadTLV.sub_tlvs_str(request.payload)
         logging.info('in %s req: %s' % (URI.N_MR, in_pload))
 
         # BBR Primary/Secondary status
@@ -166,7 +182,8 @@ class Res_N_MR(resource.Resource):
             # IPv6 Addresses TLV
             addrs_value = ThreadTLV.get_value(request.payload,
                                               TLV.A_IPV6_ADDRESSES)
-            status, addrs = Res_N_MR._parse_addrs(addrs_value)
+            if addrs_value:
+                status, addrs = Res_N_MR._parse_addrs(addrs_value)
 
             # Timeout TLV
             timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
@@ -193,13 +210,13 @@ class Res_N_MR(resource.Resource):
                 client = CoapClient()
                 await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
                 client.stop()
+                del client
 
         # Fill and return the response
-        out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status])
-        code = Code.CHANGED
-        payload = out_pload.array()
-        logging.info('out %s rsp: %s' % (URI.N_MR, out_pload))
-        return aiocoap.Message(code=code, payload=payload)
+        out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
+        logging.info(
+            'out %s rsp: %s' % (URI.N_MR, ThreadTLV.sub_tlvs_str(out_pload)))
+        return aiocoap.Message(code=Code.CHANGED, payload=out_pload)
 
 
 class DUAHandler():
@@ -257,7 +274,35 @@ class DUAHandler():
         await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
         client.stop()
 
-    async def send_bb_ans(self, mode, dst, dua, eid=None, rloc16=None):
+    async def send_pro_bb_ntf(self, dua):
+        await self.send_ntf_msg(
+            db.get('all_domain_bbrs'), DEFS.PORT_BB, URI.B_BA, aiocoap.NON,
+            dua)
+
+    async def send_bb_ans(self, dst, dua, rloc16=None):
+        await self.send_ntf_msg(
+            dst, DEFS.PORT_BB, URI.B_BA, aiocoap.CON, dua, rloc16=rloc16)
+
+    async def send_addr_ntf_ans(self, dst, dua, eid, rloc16, elapsed):
+        await self.send_ntf_msg(
+            dst,
+            DEFS.PORT_MM,
+            URI.A_AN,
+            aiocoap.CON,
+            dua,
+            eid=eid,
+            rloc16=rloc16,
+            elapsed=elapsed)
+
+    async def send_ntf_msg(self,
+                           dst,
+                           port,
+                           uri,
+                           mode,
+                           dua,
+                           eid=None,
+                           rloc16=None,
+                           elapsed=None):
         if eid is None:
             # Find the ML-EID that registered this DUA
             eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
@@ -286,13 +331,12 @@ class DUAHandler():
         payload += ThreadTLV(
             t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name).array()
 
-        logging.info(
-            'out %s ans: %s' % (URI.B_BA, ThreadTLV.sub_tlvs_str(payload)))
+        logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
         client = CoapClient()
         if mode == aiocoap.CON:
-            await client.con_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
+            await client.con_request(dst, port, uri, payload)
         else:
-            await client.non_request(dst, DEFS.PORT_BB, URI.B_BA, payload)
+            await client.non_request(dst, port, uri, payload)
         client.stop()
 
     async def send_addr_err(self, dua, eid_iid, dst_iid):
@@ -343,9 +387,7 @@ class DUAHandler():
 
     def announce(self, entry):
         # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(
-            DUA_HNDLR.send_bb_ans(aiocoap.NON, db.get('all_domain_bbrs'),
-                                  entry.dua))
+        asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
 
         # Add ND Proxy neighbor
         self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
@@ -418,10 +460,9 @@ class Res_N_DR(resource.Resource):
         payload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
         if req_dua:
             payload += ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=req_dua).array()
-        code = Code.CHANGED
         logging.info(
             'out %s rsp: %s' % (URI.N_DR, ThreadTLV.sub_tlvs_str(payload)))
-        return aiocoap.Message(code=code, payload=payload)
+        return aiocoap.Message(code=Code.CHANGED, payload=payload)
 
 
 class Res_B_BMR(resource.Resource):
@@ -456,11 +497,6 @@ class Res_B_BQ(resource.Resource):
     '''Backbone Query, Thread 1.2 9.4.8.4.2'''
 
     async def render_post(self, request):
-        # Filter own generated messages
-        src_addr =request.remote.sockaddr[0]
-        if src_addr.split('%')[0] in db.get('exterior_ipv6_ll'):
-            return COAP_NO_RESPONSE
-
         # Incoming TLVs parsing
         logging.info('in %s qry: %s' %
                      (URI.B_BQ, ThreadTLV.sub_tlvs_str(request.payload)))
@@ -472,15 +508,16 @@ class Res_B_BQ(resource.Resource):
         dua = None
         value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
         if value:
-            dua = ipaddress.IPv6Address(value)
+            dua = ipaddress.IPv6Address(bytes(value)).compressed
         rloc16 = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
 
         if not dua:
             return COAP_NO_RESPONSE
 
         # Send BB.ans to the requester
+        src_addr = request.remote.sockaddr[0]
         asyncio.ensure_future(
-            DUA_HNDLR.send_bb_ans(aiocoap.CON, src_addr, dua, rloc16))
+            DUA_HNDLR.send_bb_ans(src_addr, dua, rloc16=rloc16))
 
         return COAP_NO_RESPONSE
 
@@ -504,9 +541,9 @@ class Res_B_BA(resource.Resource):
         net_name = None
         value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
         if value:
-            dua = ipaddress.IPv6Address(value).compressed
+            dua = ipaddress.IPv6Address(bytes(value)).compressed
         value = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
-        if value:
+        if value is not None:
             rloc16 = value.hex()
         value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
         if value:
@@ -517,7 +554,7 @@ class Res_B_BA(resource.Resource):
             elapsed = struct.unpack('!I', value)[0]
         value = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
         if value:
-            net_name = struct.unpack('%ds' % len(value), value)[0]
+            net_name = struct.unpack('%ds' % len(value), value)[0].decode()
 
         # Check if all required TLVs are present
         if None in (dua, eid, elapsed, net_name):
@@ -544,7 +581,7 @@ class Res_B_BA(resource.Resource):
             # Send ADDR_NTF.ans
             bbr_rloc16 = ipaddress.IPv6Address(
                 db.get('dongle_rloc')).packed[-2:]
-            # If this BBR dongle originated the addr_qry, send add_ntf to its
+            # If this BBR dongle originated the addr_qry, send addr_ntf to its
             # link local address
             if rloc16 == bbr_rloc16:
                 dst = db.get('dongle_ll')
@@ -552,9 +589,12 @@ class Res_B_BA(resource.Resource):
                 dst = NETWORK.get_rloc_from_short(
                     db.get('dongle_prefix'), rloc16)
             asyncio.ensure_future(
-                DUA_HNDLR.send_bb_ans(aiocoap.CON, dst, dua, eid, bbr_rloc16))
+                DUA_HNDLR.send_addr_ntf_ans(
+                    dst, dua, eid=eid, rloc16=bbr_rloc16, elapsed=elapsed))
 
-        return COAP_NO_RESPONSE
+        # ACK
+        #return COAP_NO_RESPONSE
+        return aiocoap.message.Message(no_response=24)
 
 
 class Res_A_AQ(resource.Resource):
@@ -634,20 +674,6 @@ class Res_A_AE(resource.Resource):
             DUA_HNDLR.remove_entry(dua=dua)
 
         return COAP_NO_RESPONSE
-
-
-class CoapServer():
-    '''CoAP Server'''
-
-    def __init__(self, addr, port, resources):
-        root = resource.Site()
-        for res in resources:
-            root.add_resource(res[0], res[1])
-        self.task = asyncio.Task(
-            aiocoap.Context.create_server_context(root, bind=(addr, port)))
-
-    def stop(self):
-        self.task.cancel()
 
 
 class COAPSERVER(Ktask):

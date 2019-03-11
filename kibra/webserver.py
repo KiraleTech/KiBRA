@@ -101,8 +101,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 size = req.get('sz', ['0'])[0]  # Zero size by default
                 hl = req.get('hl', ['255'])[0]  # Hop limit 255 by default
                 iface = db.get('exterior_ifname')
-                bash('ping -c1 -W2 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
-                data = 'OK'
+                data = bash(
+                    'ping -c1 -W2 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
             elif self.path.startswith('/radvd'):
                 off = req.get('off')
                 backhaul = req.get('bh')
