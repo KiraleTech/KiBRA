@@ -175,8 +175,9 @@ class MDNS(Ktask):
 
         # Disable service
         logging.info('Removing Avahi service.')
+        bash('service avahi-daemon stop')
         bash('rm /etc/avahi/services/%s.service' % db.get('dongle_name'))
-        bash('service avahi-daemon restart')
+        bash('service avahi-daemon start')
 
     def service_update(self):
         records = get_records()
