@@ -121,6 +121,9 @@ class MulticastHandler():
         # Remove the address from the volatile list
         self.maddrs.pop(addr)
 
+        # Apply changes to cached addresses
+        db.set('mlr_cache', str(self.maddrs))
+
         # Remove the address from the presistent list
         maddrs_perm = db.get('maddrs_perm') or []
         if addr in maddrs_perm:
@@ -138,9 +141,8 @@ class MulticastHandler():
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
         rem_list = [addr for addr, tout in self.maddrs.items() if tout < now]
-        if rem_list:
-            for addr in rem_list:
-                self.addr_remove(addr)
+        for addr in rem_list:
+            self.addr_remove(addr)
 
 
 class Res_N_MR(resource.Resource):
