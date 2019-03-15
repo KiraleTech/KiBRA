@@ -150,6 +150,8 @@ class DIAGS(Ktask):
             ][::-1]
             qualities = value[9:]
             for router_id in router_ids:
+                if not qualities:
+                    break
                 router_quality = int(qualities.pop(0))
                 q_out = (router_quality & 0xC0) >> 6
                 q_in = (router_quality & 0x30) >> 4
