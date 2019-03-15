@@ -194,7 +194,11 @@ class HDP_Announcer():
     def start(self, props):
         while self.run:
             request = self.sock.recvfrom(1024)
-            if request[0].decode() == 'BBR':
+            try:
+                payload = request[0].decode()
+            except:
+                payload = ''
+            if payload == 'BBR':
                 db.set('discovered', 1)
                 dst_addr = request[1][0]
                 dst_port = request[1][1]
