@@ -92,9 +92,11 @@ def handle_ipv6(action):
          ' FORWARD -p udp -m state --state ESTABLISHED -j ACCEPT')
     bash('ip6tables -w -t filter -' + action +
          ' FORWARD -p icmpv6 -m state --state ESTABLISHED,RELATED -j ACCEPT')
+    '''
     # Forward multicast (filtering is made by mcrouter)
     bash('ip6tables -w -t mangle -' + action +
          ' PREROUTING -d ff00::/8 -j HL --hl-inc 1')
+    '''
     # Block all other forwarding to the Thread interface
     if 'dhcp_pool' in db.CFG:
         bash('ip6tables -w -t filter -' + action + ' FORWARD -d ' +
