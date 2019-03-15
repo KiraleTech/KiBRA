@@ -68,6 +68,7 @@ DB_ITEMS = {
     'exterior_ipv4_ll': [str, None, lambda x: True, False, False],
     'exterior_ipv6': [str, None, lambda x: True, False, False],
     'exterior_ipv6_ll': [str, None, lambda x: True, False, False],
+    'exterior_mac': [str, None, lambda x: True, False, False],
     'exterior_port_mc': [int, None, lambda x: True, False, False],
     'interior_ifname': [str, None, lambda x: True, False, False],
     'interior_ifnumber': [int, None, lambda x: True, False, False],
