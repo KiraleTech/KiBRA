@@ -31,6 +31,9 @@ MCAST_HNDLR = None
 #COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
 COAP_NO_RESPONSE = None
 
+# Use a single CoAP client for the Backbone notifications
+COAP_CLIENT = CoapClient()
+
 
 class CoapServer():
     '''CoAP Server'''
@@ -209,10 +212,8 @@ class Res_N_MR(resource.Resource):
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
                 dst = '%s%%%s' % (db.get('all_network_bbrs'),
                                   db.get('exterior_ifname'))
-                client = CoapClient()
-                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
-                client.stop()
-                del client
+                await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BMR,
+                                              payload)
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
@@ -272,9 +273,7 @@ class DUAHandler():
         logging.info(
             'out %s qry: %s' % (URI.B_BQ, ThreadTLV.sub_tlvs_str(payload)))
 
-        client = CoapClient()
-        await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
-        client.stop()
+        await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
 
     async def send_pro_bb_ntf(self, dua):
         await self.send_ntf_msg(
@@ -334,12 +333,10 @@ class DUAHandler():
             t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name).array()
 
         logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
-        client = CoapClient()
         if mode == aiocoap.CON:
-            await client.con_request(dst, port, uri, payload)
+            await COAP_CLIENT.con_request(dst, port, uri, payload)
         else:
-            await client.non_request(dst, port, uri, payload)
-        client.stop()
+            await COAP_CLIENT.non_request(dst, port, uri, payload)
 
     async def send_addr_err(self, dua, eid_iid, dst_iid):
         'Thread 1.2 5.23.3.6.4'
@@ -355,10 +352,8 @@ class DUAHandler():
         logging.info(
             'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
-        client = CoapClient()
-        await client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
-                                 payload)
-        client.stop()
+        await COAP_CLIENT.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
+                                      payload)
 
     async def perform_dad(self, entry):
         # Send BB.qry DUA_DAD_REPEAT times
