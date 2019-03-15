@@ -96,13 +96,34 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 else:
                     return
             elif self.path.startswith('/ping'):
-                dst = req.get('dst',
-                              ['0100::'])[0]  # Discard address by default
-                size = req.get('sz', ['0'])[0]  # Zero size by default
-                hl = req.get('hl', ['255'])[0]  # Hop limit 255 by default
+                dst = req.get('dst', ['0100::'])[0]
+                size = req.get('sz', ['0'])[0]
+                hl = req.get('hl', ['255'])[0]
                 iface = db.get('exterior_ifname')
-                data = bash(
-                    'ping -c1 -W2 -s%s -t%s -I%s %s' % (size, hl, iface, dst))
+                port = req.get('port', [''])[0]
+                if port:
+                    # UDP
+                    cmd = 'nping -6 --udp'
+                    cmd += ' --source-port %s --dest-port %s' % (port, port)
+                    cmd += ' --no-capture --count 1'
+                    cmd += ' --interface %s' % iface
+                    cmd += ' --dest-ip %s' % dst
+                    cmd += ' --source-mac %s' % db.get('exterior_mac')
+                    # TODO: https://en.wikipedia.org/wiki/Multicast_address#Ethernet
+                    cmd += ' --dest-mac ff:ff:ff:ff:ff:ff'
+                    cmd += ' --hop-limit %s' % hl
+                    # TODO: use DUA as source
+                    cmd += ' --source-ip %s' % db.get('exterior_ipv6_ll')
+                    cmd += ' --data-length %s' % size
+                else:
+                    # ICMP
+                    cmd = 'ping -6 -c1 -W2'
+                    cmd += ' -s%s -t%s -I%s %s' % (size, hl, iface, dst)
+                try:
+                    data = bash(cmd)
+                except Exception as e:
+                    logging.error(e)
+                    data = 'ping error'
             elif self.path.startswith('/radvd'):
                 off = req.get('off')
                 backhaul = req.get('bh')
