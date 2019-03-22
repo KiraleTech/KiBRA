@@ -153,24 +153,35 @@ class Res_N_MR(resource.Resource):
 
     @staticmethod
     def _parse_addrs(payload):
-        addrs = []
+        # Unspecified error if bad payload
+        if len(payload) % 16 != 0:
+            return DMStatus.ST_UNSPEC, [], []
+
+        status = DMStatus.ST_SUCESS
+        good_addrs = []
+        bad_addrs = []
         i = 0
         while i < len(payload):
+            addr_bytes = bytes(payload[i:i + 16])
             # Check for valid IPv6 address
             try:
-                addr = ipaddress.IPv6Address(bytes(payload[i:i + 16]))
+                addr = ipaddress.IPv6Address(addr_bytes)
+                # Check for valid multicast address with scope > 3
+                if addr.is_multicast and payload[i + 1] & 0x0F > 3:
+                    good_addrs.append(addr_bytes)
+                else:
+                    status = DMStatus.ST_INV_ADDR
+                    bad_addrs.append(addr_bytes)
             except:
-                return DMStatus.ST_INV_ADDR, []
-            # Check for valid multicast address with scope > 3
-            if addr.is_multicast and payload[i + 1] & 0x0F > 3:
-                addrs.append(addr)
-            else:
-                return DMStatus.ST_INV_ADDR, []
+                status = DMStatus.ST_INV_ADDR
+                bad_addrs.append(addr_bytes)
             i += 16
-        return DMStatus.ST_SUCESS, addrs
+        return status, good_addrs, bad_addrs
 
     async def render_post(self, request):
         status = DMStatus.ST_UNSPEC
+        good_addrs = []
+        bad_addrs = []
 
         # Incoming TLVs parsing
         in_pload = ThreadTLV.sub_tlvs_str(request.payload)
@@ -180,7 +191,6 @@ class Res_N_MR(resource.Resource):
         if 'primary' not in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
         else:
-            addrs = []
             timeout = None
             comm_sid = None
 
@@ -188,7 +198,8 @@ class Res_N_MR(resource.Resource):
             addrs_value = ThreadTLV.get_value(request.payload,
                                               TLV.A_IPV6_ADDRESSES)
             if addrs_value:
-                status, addrs = Res_N_MR._parse_addrs(addrs_value)
+                status, good_addrs, bad_addrs = Res_N_MR._parse_addrs(
+                    addrs_value)
 
             # Timeout TLV
             timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
@@ -198,15 +209,23 @@ class Res_N_MR(resource.Resource):
                                            TLV.A_COMMISSIONER_SESSION_ID)
 
             # Register valid addresses
-            if addrs:
+            if good_addrs:
                 if timeout and comm_sid:
                     addr_tout = timeout
                 else:
                     addr_tout = db.get('mlr_timeout') or DEFS.MIN_MLR_TIMEOUT
-                MCAST_HNDLR.reg_update(addrs, addr_tout)
+                reg_addrs = []
+                reg_addrs_bytes = []
+                for addr_bytes in good_addrs:
+                    reg_addrs.append(
+                        ipaddress.IPv6Address(addr_bytes).compressed)
+                    reg_addrs_bytes += addr_bytes
+                MCAST_HNDLR.reg_update(reg_addrs, addr_tout)
                 # Send BMLR.ntf
                 ipv6_addressses_tlv = ThreadTLV(
-                    t=TLV.A_IPV6_ADDRESSES, l=len(addrs_value), v=addrs_value)
+                    t=TLV.A_IPV6_ADDRESSES,
+                    l=16 * len(good_addrs),
+                    v=reg_addrs_bytes)
                 timeout_tlv = ThreadTLV(
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout))
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
@@ -217,6 +236,14 @@ class Res_N_MR(resource.Resource):
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
+        addrs_payload = []
+        for elem in bad_addrs:
+            addrs_payload += elem
+        if bad_addrs:
+            out_pload += ThreadTLV(
+                t=TLV.A_IPV6_ADDRESSES,
+                l=16 * len(bad_addrs),
+                v=bytes(addrs_payload)).array()
         logging.info(
             'out %s rsp: %s' % (URI.N_MR, ThreadTLV.sub_tlvs_str(out_pload)))
         return aiocoap.Message(code=Code.CHANGED, payload=out_pload)
@@ -273,7 +300,10 @@ class DUAHandler():
         logging.info(
             'out %s qry: %s' % (URI.B_BQ, ThreadTLV.sub_tlvs_str(payload)))
 
-        await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
+        client = CoapClient()
+        await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
+        client.stop()
+        del client
 
     async def send_pro_bb_ntf(self, dua):
         await self.send_ntf_msg(
@@ -555,7 +585,7 @@ class Res_B_BA(resource.Resource):
 
         # Check if all required TLVs are present
         if None in (dua, eid, elapsed, net_name):
-            return
+            return COAP_NO_RESPONSE
 
         logging.info(
             'BB.ans: DUA=%s, ML-EID=%s, Time=%d, Net Name=%s, RLOC16=%s' %
@@ -567,7 +597,7 @@ class Res_B_BA(resource.Resource):
             entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
             if entry_eid is None or dad is not True:
                 # Not expecting an answer for this DUA
-                return
+                return COAP_NO_RESPONSE
             else:
                 # Duplication detected!
                 DUA_HNDLR.duplicated_found(dua)
