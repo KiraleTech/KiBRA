@@ -20,6 +20,7 @@ IFF_UP = 0x1
 IFF_LOOPBACK = 0x8
 IFF_MULTICAST = 0x1000
 
+
 def get_prefix_based_mcast(prefix, groupid):
     '''RFC 3306'''
     prefix = prefix.split('/')[0]
@@ -141,7 +142,7 @@ def set_ext_iface():
             # First interface matching all criteria is selected
             db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
             break
-        
+
     # No appropiate interface was found
     if not db.get('exterior_ifname'):
         raise Exception('No exterior interface available.')
@@ -231,6 +232,10 @@ def _ifup():
     bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' %
          db.get('interior_ifname'))
     logging.info('DAD has been disabled for %s.', db.get('interior_ifname'))
+
+    # Enable a bigger number of multicast groups
+    # https://www.kernel.org/doc/Documentation/sysctl/net.txt
+    bash('echo 65536 > /proc/sys/net/core/optmem_max')
 
     # Bring interior interface up
     idx = db.get('interior_ifnumber')
@@ -383,8 +388,12 @@ class NETWORK(Ktask):
         _ifdown()
 
     async def periodic(self):
-        if not IPR.link_lookup(
-                ifname=db.get('interior_ifname'), operstate='UP'):
+        try:
+            interior_link_up = IPR.link_lookup(
+                ifname=db.get('interior_ifname'), operstate='UP')
+        except:
+            interior_link_up = False
+        if not interior_link_up:
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
