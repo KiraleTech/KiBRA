@@ -11,6 +11,7 @@ class CoapClient():
 
     def __init__(self):
         self.context = None
+        self.busy = False
 
     async def con_request(self, addr, port, path, payload=''):
         return await self.request(addr, port, path, aiocoap.CON, payload)
@@ -20,12 +21,15 @@ class CoapClient():
 
     async def request(self, addr, port, path, mtype, payload=''):
         '''Client request'''
+        if self.busy:
+            return
         if self.context is None:
             self.context = await aiocoap.Context.create_client_context()
         req = aiocoap.Message(code=Code.POST, mtype=mtype, payload=payload)
         uri = 'coap://[%s]:%u%s' % (addr, port, path)
         req.set_request_uri(uri=uri, set_uri_host=False)
         logging.debug('tx: %s %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
+        self.busy = True
         try:
             # Workaround for not waiting a response to a non-confirmable request
             if mtype == aiocoap.NON:
@@ -33,15 +37,18 @@ class CoapClient():
                     await asyncio.wait_for(
                         self.context.request(req).response, timeout=0.01)
                 except asyncio.TimeoutError:
+                    self.busy = False
                     return
             else:
                 response = await self.context.request(req).response
         except:
             logging.warn('No response from %s', addr)
+            self.busy = False
         else:
             logging.debug(
                 'rx: %s %s %s' % (addr, response.code,
                                   ThreadTLV.sub_tlvs_str(response.payload)))
+            self.busy = False
             return response.payload
 
     def stop(self):
