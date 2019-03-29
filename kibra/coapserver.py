@@ -34,6 +34,9 @@ COAP_NO_RESPONSE = None
 # Use a single CoAP client for the Backbone notifications
 COAP_CLIENT = CoapClient()
 
+# Limit the number of DUA registrations managed by this BBR
+DUA_LIMIT = 768
+
 
 class CoapServer():
     '''CoAP Server'''
@@ -167,7 +170,7 @@ class Res_N_MR(resource.Resource):
             try:
                 addr = ipaddress.IPv6Address(addr_bytes)
                 # Check for valid multicast address with scope > 3
-                if addr.is_multicast and payload[i + 1] & 0x0F > 3:
+                if addr.is_multicast and addr_bytes[1] & 0x0F > 3:
                     good_addrs.append(addr_bytes)
                 else:
                     status = DMStatus.ST_INV_ADDR
@@ -300,10 +303,7 @@ class DUAHandler():
         logging.info(
             'out %s qry: %s' % (URI.B_BQ, ThreadTLV.sub_tlvs_str(payload)))
 
-        client = CoapClient()
-        await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
-        client.stop()
-        del client
+        await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
 
     async def send_pro_bb_ntf(self, dua):
         await self.send_ntf_msg(
@@ -451,6 +451,8 @@ class Res_N_DR(resource.Resource):
         # BBR Primary/Secondary status
         if 'primary' not in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
+        elif len(DUA_HNDLR.entries) >= DUA_LIMIT:
+            status = DMStatus.ST_RES_SHRT
         else:
             dua = None
             eid = None
