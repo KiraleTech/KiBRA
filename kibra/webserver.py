@@ -147,6 +147,9 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 else:
                     return
                 data = 'OK'
+            elif self.path.startswith('/mdnsqry'):
+                bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
+                data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
                 with open(db.LOG_FILE, 'r') as file_:
