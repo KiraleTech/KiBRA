@@ -143,7 +143,7 @@ class MDNS(Ktask):
             file_.write('use-ipv4=%s\n' %
                         ('yes' if db.has_keys(['exterior_ipv4']) else 'no'))
             file_.write('use-ipv6=%s\n' %
-                        ('yes' if db.has_keys(['exterior_ipv6']) else 'no'))
+                        ('yes' if db.has_keys(['exterior_ipv6_ll']) else 'no'))
             file_.write('allow-interfaces=%s\n' % db.get('exterior_ifname'))
             file_.write('disallow-other-stacks=yes\n\n')
             file_.write('[publish]\n')
