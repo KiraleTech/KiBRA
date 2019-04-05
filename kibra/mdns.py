@@ -20,41 +20,40 @@ def nat_start(action):
     # NAT 4 -> 6
     if db.has_keys(['exterior_ipv4']):
         if action == 'I':
-            bash('jool --bib --add --udp ' + db.get('exterior_ipv4') + '#' +
-                 str(db.get('exterior_port_mc')) + ' ' +
-                 db.get('dongle_rloc') + '#' + str(db.get('bagent_port')) +
-                 ' &> /dev/null')
+            bash('jool bib add %s#%s %s#%s --udp' %
+                 (db.get('exterior_ipv4'), str(db.get('exterior_port_mc')),
+                  db.get('dongle_rloc'), str(db.get('bagent_port'))))
         else:
-            bash('jool --bib --remove --udp ' + db.get('exterior_ipv4') + '#' +
-                 str(db.get('exterior_port_mc')) + ' ' +
-                 db.get('dongle_rloc') + '#' + str(db.get('bagent_port')) +
-                 ' &> /dev/null')
+            bash('jool bib remove %s#%s %s#%s --udp' %
+                 (db.get('exterior_ipv4'), str(db.get('exterior_port_mc')),
+                  db.get('dongle_rloc'), str(db.get('bagent_port'))))
         # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
+        # Flush old rules first
+        bash('iptables -F -t mangle')
         bash(
             'iptables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
             % (action, db.get('exterior_ifname'), db.get('exterior_ipv4'),
                db.get('exterior_port_mc'), db.get('bridging_mark')))
     # NAT 6 -> 6
-    if db.has_keys(['exterior_ipv6']):
+    if db.has_keys(['exterior_ipv6_ll']):
         bash(
             'ip6tables -w -t nat -%s PREROUTING -i %s -d %s -p udp --dport %d -j DNAT --to [%s]:%d'
-            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6'),
+            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6_ll'),
                db.get('exterior_port_mc'), db.get('dongle_rloc'),
                db.get('bagent_port')))
         bash(
             'ip6tables -w -t nat -%s POSTROUTING -o %s -s %s -p udp --sport %d -j SNAT --to [%s]:%d'
             % (action, db.get('exterior_ifname'), db.get('dongle_rloc'),
-               db.get('bagent_port'), db.get('exterior_ipv6'),
+               db.get('bagent_port'), db.get('exterior_ipv6_ll'),
                db.get('exterior_port_mc')))
         bash(
             'ip6tables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
-            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6'),
+            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6_ll'),
                db.get('exterior_port_mc'), db.get('bridging_mark')))
 
 
 def get_records():
     records = {}
-
     '''Table 8-5. Border Agent State Bitmap'''
     CONNECTION_MODE = 0
     THREAD_INTERFACE_STATUS = 3
@@ -119,18 +118,19 @@ def get_records():
 
     return records
 
+
 class MDNS(Ktask):
     def __init__(self):
         Ktask.__init__(
             self,
             name='mdns',
             start_keys=[
-                'exterior_ifname', 'dongle_netname',
-                'dongle_xpanid', 'bbr_seq', 'bbr_port'
+                'exterior_ifname', 'dongle_netname', 'dongle_xpanid',
+                'bbr_seq', 'bbr_port'
             ],
             stop_keys=['interior_ifname'],
             # Needs coapserver to have the BBR Dataset
-            start_tasks=['network', 'coapserver'],
+            start_tasks=['network', 'coapserver', 'nat'],
             period=2)
 
     async def periodic(self):

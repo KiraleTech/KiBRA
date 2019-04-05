@@ -228,5 +228,5 @@ class MCRouter():
         mcgroup = ipaddress.IPv6Address(mcgroup).packed
         if ifnumber is None:
             ifnumber = db.get('exterior_ifnumber')
-        msg = struct.pack('16sI', mcgroup, ifnumber)
-        self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, msg)
+        ipv6_mreq = struct.pack('16sI', mcgroup, ifnumber)
+        self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, ipv6_mreq)

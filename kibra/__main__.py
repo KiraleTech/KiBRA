@@ -94,7 +94,7 @@ def _main():
     TASKS.append(SERIAL())
     TASKS.append(NETWORK())
     #TASKS.append(DHCP())
-    #TASKS.append(NAT())
+    TASKS.append(NAT())
     #TASKS.append(DNS())
     TASKS.append(MDNS())
     TASKS.append(DIAGS())

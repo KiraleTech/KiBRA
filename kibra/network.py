@@ -116,8 +116,11 @@ def get_addrs(ifname, family, scope=None):
     # Find configured addresses
     idx = IPR.link_lookup(ifname=ifname)[0]
     addrs = []
-    for addr in IPR.get_addr(index=idx, family=family, scope=scope):
-        addrs.append(addr.get_attr('IFA_ADDRESS'))
+    try:
+        for addr in IPR.get_addr(index=idx, family=family, scope=scope):
+            addrs.append(addr.get_attr('IFA_ADDRESS'))
+    except:
+        logging.warning('Problem retrieving device addresses.')
     return addrs
 
 
@@ -397,3 +400,5 @@ class NETWORK(Ktask):
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
+
+        # TODO: detect changes in addresses
