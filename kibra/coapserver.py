@@ -234,8 +234,11 @@ class Res_N_MR(resource.Resource):
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
                 dst = '%s%%%s' % (db.get('all_network_bbrs'),
                                   db.get('exterior_ifname'))
-                await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BMR,
+                client = CoapClient()                  
+                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR,
                                               payload)
+                client.stop()
+                del client
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
@@ -293,7 +296,7 @@ class DUAHandler():
                 return entry.eid, int(elapsed), entry.dad
         return None, None, None
 
-    async def send_bb_query(self, dua, rloc16=None):
+    async def send_bb_query(self, client, dua, rloc16=None):
         dua_bytes = ipaddress.IPv6Address(dua).packed
         payload = ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=dua_bytes).array()
         if rloc16:
@@ -303,7 +306,7 @@ class DUAHandler():
         logging.info(
             'out %s qry: %s' % (URI.B_BQ, ThreadTLV.sub_tlvs_str(payload)))
 
-        await COAP_CLIENT.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
+        await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
 
     async def send_pro_bb_ntf(self, dua):
         await self.send_ntf_msg(
@@ -386,16 +389,21 @@ class DUAHandler():
                                       payload)
 
     async def perform_dad(self, entry):
+        client = CoapClient()                  
         # Send BB.qry DUA_DAD_REPEAT times
         for _ in range(DEFS.DUA_DAD_REPEAT):
-            await self.send_bb_query(entry.dua)
+            await self.send_bb_query(client, entry.dua)
             await asyncio.sleep(DEFS.DUA_DAD_QUERY_TIMEOUT)
 
             # Finsih process if duplication was detected meanwhile
             if not entry.dad:
                 logging.info('DUA %s was duplicated, removing...' % entry.dua)
                 self.remove_entry(entry)
+                client.stop()
+                del client
                 return
+        client.stop()
+        del client
 
         # Set DAD flag as finished
         entry.dad = False
@@ -663,7 +671,7 @@ class Res_A_AQ(resource.Resource):
 
         # TODO: mantain a cache
         # Propagate Address Query to the Backbone
-        await DUA_HNDLR.send_bb_query(dua, rloc16)
+        await DUA_HNDLR.send_bb_query(COAP_CLIENT, dua, rloc16)
 
         return COAP_NO_RESPONSE
 
