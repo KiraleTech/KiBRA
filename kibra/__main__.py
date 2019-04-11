@@ -30,8 +30,10 @@ SERVER = None
 async def _master():
     # TODO: Have a way to completely stop the daemon
     while True:
-        # Wait until the start command is received
+        # Start over
         db.set('status_kibra', 'stopped')
+
+        # Wait until the start command is received
         while db.get('action_kibra') != 'start':
             await asyncio.sleep(0.2)
 
@@ -76,10 +78,7 @@ def _main():
 
     # Load database
     db.load()
-    db.set('kibra_vendor', kibra.__vendor__)
-    db.set('kibra_model', kibra.__model__)
-    db.set('kibra_version', 'KiBRA v%s' % kibra.__version__)
-    
+
     # Exterior network configuration
     global_netconfig()
 
@@ -87,10 +86,10 @@ def _main():
     enable_ncp()
 
     # Start web interface
-    db.set('discovered', 0)
     webserver.start()
 
     # Start subtasks
+    mdns = MDNS()
     TASKS.append(SERIAL())
     TASKS.append(NETWORK())
     #TASKS.append(DHCP())
@@ -99,6 +98,9 @@ def _main():
     TASKS.append(MDNS())
     TASKS.append(DIAGS())
     TASKS.append(COAPSERVER())
+
+    # Launch mDNS already
+    asyncio.ensure_future(mdns.run())
 
     if db.get('autostart') == 1:
         db.set('action_kibra', 'start')

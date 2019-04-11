@@ -123,16 +123,17 @@ class MDNS(Ktask):
         Ktask.__init__(
             self,
             name='mdns',
-            start_keys=[
-                'exterior_ifname', 'dongle_netname', 'dongle_xpanid',
-                'bbr_seq', 'bbr_port'
-            ],
-            stop_keys=['interior_ifname'],
-            # Needs coapserver to have the BBR Dataset
-            start_tasks=['network', 'coapserver', 'nat'],
+            start_keys=['exterior_ifname', 'bbr_seq', 'bbr_port'],
             period=2)
+        self.nat_enabled = False
 
     async def periodic(self):
+        if not self.nat_enabled and db.has_keys(['dongle_rloc']):
+            # Enable NAT
+            logging.info('Enabling Border Agent NAT.')
+            nat_start('I')
+            self.nat_enabled = True
+
         self.service_update()
 
     def kstart(self):
@@ -166,14 +167,11 @@ class MDNS(Ktask):
         # Enable service
         self.service_update()
 
-        # Enable NAT
-        logging.info('Enabling Border Agent NAT.')
-        nat_start('I')
-
     def kstop(self):
-        # Disnable NAT
-        logging.info('Disabling Border Agent NAT.')
-        nat_start('D')
+        if self.nat_enabled:
+            # Disnable NAT
+            logging.info('Disabling Border Agent NAT.')
+            nat_start('D')
 
         # Disable service
         logging.info('Removing Avahi service.')
@@ -203,16 +201,16 @@ class MDNS(Ktask):
         snw.append(r_bin % ('sb', records['sb']))
         snw.append(r_txt % ('vn', records['vn']))
         snw.append(r_txt % ('mn', records['mn']))
-        if records['nn']:
+        if 'nn' in records.keys():
             snw.append(r_txt % ('nn', records['nn']))
-        if records['xp']:
+        if 'xp' in records.keys():
             snw.append(r_bin % ('xp', records['xp']))
-        if records['sq']:
+        if 'sq' in records.keys():
             snw.append(r_bin % ('sq', records['sq']))
-        if records['bb']:
+        if 'bb' in records.keys():
             snw.append(r_bin % ('bb', records['bb']))
-        snw += '\t</service>'
-        snw += '</service-group>'
+        snw.append('\t</service>')
+        snw.append('</service-group>\n')
         snw = '\n'.join(snw)
 
         # Load the previous service file, or create it
