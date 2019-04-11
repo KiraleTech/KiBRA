@@ -199,6 +199,7 @@ def _configure():
 def _dongle_get_config():
     db.set('dongle_role', send_cmd('show role')[0])
     db.set('dongle_status', send_cmd('show status')[0])
+    db.set('dongle_heui64', send_cmd('show heui64')[0])
 
     # Get mesh rloc and link local addresses
     addrs = send_cmd('show ipaddr')

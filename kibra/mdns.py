@@ -95,8 +95,7 @@ def get_records():
         status = IFACE_OFF
         if mode == DTLS_PSKC:
             records['nn'] = db.get('kibra_model')
-            # TODO: sha256
-            records['xp'] = db.get('dongle_eui64')
+            records['xp'] = db.get('dongle_heui64')
 
     bitmap |= status << THREAD_INTERFACE_STATUS
 
