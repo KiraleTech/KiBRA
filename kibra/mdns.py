@@ -108,7 +108,7 @@ def get_records():
         bitmap |= 1 << BBR_FUNCTION_ACTIVE
         if 'primary' in bbr_status:
             bitmap |= 1 << BBR_PRIMARY
-    
+
     records['sb'] = struct.pack('!I', bitmap).hex()
     records['vn'] = db.get('kibra_vendor')
     records['mn'] = db.get('kibra_model')
@@ -137,28 +137,31 @@ class MDNS(Ktask):
 
     def kstart(self):
         logging.info('Configuring Avahi daemon.')
+        ip4 = 'yes' if db.has_keys(['exterior_ipv4']) else 'no'
+        ip6 = 'yes' if db.has_keys(['exterior_ipv6_ll']) else 'no'
         with open(MDNS_CONFIG, 'w') as file_:
-            file_.write('[server]\n')
-            file_.write('use-ipv4=%s\n' %
-                        ('yes' if db.has_keys(['exterior_ipv4']) else 'no'))
-            file_.write('use-ipv6=%s\n' %
-                        ('yes' if db.has_keys(['exterior_ipv6_ll']) else 'no'))
-            file_.write('allow-interfaces=%s\n' % db.get('exterior_ifname'))
-            file_.write('disallow-other-stacks=yes\n\n')
-            file_.write('[publish]\n')
-            file_.write('publish-addresses=yes\n')
-            file_.write('publish-hinfo=no\n')
-            file_.write('publish-workstation=no\n')
-            file_.write('publish-domain=no\n')
-            file_.write('publish-aaaa-on-ipv4=no\n')
-            file_.write('publish-a-on-ipv6=no\n\n')
-            file_.write('[rlimits]\n')
-            file_.write('rlimit-core=0\n')
-            file_.write('rlimit-data=4194304\n')
-            file_.write('rlimit-fsize=0\n')
-            file_.write('rlimit-nofile=30\n')
-            file_.write('rlimit-stack=4194304\n')
-            file_.write('rlimit-nproc=3\n')
+            lines = []
+            lines.append('[server]')
+            lines.append('use-ipv4=%s' % ip4)
+            lines.append('use-ipv6=%s' % ip6)
+            lines.append('allow-interfaces=%s' % db.get('exterior_ifname'))
+            lines.append('disallow-other-stacks=yes\n')
+            lines.append('[publish]')
+            lines.append('publish-addresses=yes')
+            lines.append('publish-hinfo=no')
+            lines.append('publish-workstation=no')
+            lines.append('publish-domain=no')
+            lines.append('publish-aaaa-on-ipv4=no')
+            lines.append('publish-a-on-ipv6=no\n')
+            lines.append('[rlimits]')
+            lines.append('rlimit-core=0')
+            lines.append('rlimit-data=4194304')
+            lines.append('rlimit-fsize=0')
+            lines.append('rlimit-nofile=30')
+            lines.append('rlimit-stack=4194304')
+            lines.append('rlimit-nproc=3')
+            lines = '\n'.join(lines)
+            file_.write(lines)
 
         # Enable service
         self.service_update()
@@ -179,32 +182,38 @@ class MDNS(Ktask):
         bash('service avahi-daemon start')
 
     def service_update(self):
+        r_txt = '\t\t<txt-record>%s=%s</txt-record>'
+        r_bin = '\t\t<txt-record value-format="binary-hex">%s=%s</txt-record>'
+
         records = get_records()
+        hostname = socket.gethostname()
         # Compose the new service data
-        snw = ''
-        snw += '<?xml version="1.0" encoding="utf-8" standalone="no"?>\n'
-        snw += '<!DOCTYPE service-group SYSTEM "avahi-service.dtd">\n'
-        snw += '<service-group>\n'
-        snw += '  <name>%s %s %s</name>\n' % (db.get('dongle_name'), records['vn'], records['mn'])
-        snw += '  <service>\n'
-        snw += '      <type>_meshcop._udp</type>\n'
-        snw += '      <host-name>%s.local</host-name>\n' % socket.gethostname()
-        snw += '      <port>%d</port>\n' % db.get('exterior_port_mc')
-        snw += '      <txt-record>rv=%s</txt-record>\n' % '1'
-        snw += '      <txt-record>tv=%s</txt-record>\n' % '1.2.0'
-        snw += '      <txt-record value-format="binary-hex">sb=%s</txt-record>\n' % records['sb']
+        snw = []
+        snw.append('<?xml version="1.0" encoding="utf-8" standalone="no"?>')
+        snw.append('<!DOCTYPE service-group SYSTEM "avahi-service.dtd">')
+        snw.append('<service-group>')
+        snw.append('\t<name>%s %s %s</name>' % (db.get('dongle_name'),
+                                                records['vn'], records['mn']))
+        snw.append('\t<service>')
+        snw.append('\t\t<type>_meshcop._udp</type>')
+        snw.append('\t\t<host-name>%s.local</host-name>' % hostname)
+        snw.append('\t\t<port>%d</port>' % db.get('exterior_port_mc'))
+        snw.append(r_txt % ('rv', '1'))
+        snw.append(r_txt % ('tv', '1.2.0'))
+        snw.append(r_bin % ('sb', records['sb']))
+        snw.append(r_txt % ('vn', records['vn']))
+        snw.append(r_txt % ('mn', records['mn']))
         if records['nn']:
-            snw += '      <txt-record>nn=%s</txt-record>\n' % records['nn']
+            snw.append(r_txt % ('nn', records['nn']))
         if records['xp']:
-            snw += '      <txt-record value-format="binary-hex">xp=%s</txt-record>\n' % records['xp']
-        snw += '      <txt-record>vn=%s</txt-record>\n' % records['vn']
-        snw += '      <txt-record>mn=%s</txt-record>\n' % records['mn']
+            snw.append(r_bin % ('xp', records['xp']))
         if records['sq']:
-            snw += '      <txt-record value-format="binary-hex">sq=%s</txt-record>\n' % records['sq']
+            snw.append(r_bin % ('sq', records['sq']))
         if records['bb']:
-            snw += '      <txt-record value-format="binary-hex">bb=%s</txt-record>\n' % records['bb']
-        snw += '  </service>\n'
-        snw += '</service-group>\n'
+            snw.append(r_bin % ('bb', records['bb']))
+        snw += '\t</service>'
+        snw += '</service-group>'
+        snw = '\n'.join(snw)
 
         # Load the previous service file, or create it
         pathlib.Path(MDNS_SERVICES).mkdir(parents=True, exist_ok=True)
@@ -214,7 +223,7 @@ class MDNS(Ktask):
 
         with open(str(service_file), 'r') as file_:
             sod = file_.read()
-        
+
         # Only restart service if something changed
         if snw != sod:
             with open(str(file_name), 'w') as file_:
