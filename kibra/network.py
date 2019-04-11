@@ -185,8 +185,8 @@ def dongle_conf():
     db.set('bridging_mark',
            int(db.get('interior_mac').replace(':', '')[-8:], 16))
     db.set('bridging_table', db.get('interior_mac'))
-    db.set('bagent_port', 49191)
-    db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
+    # This is only useful when more than one interior interface is used
+    #db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
 
     # Load or generate the Pool4 prefix
     if not db.has_keys(['pool4']):

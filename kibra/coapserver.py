@@ -732,10 +732,6 @@ class COAPSERVER(Ktask):
         logging.info('Starting Multicast handler')
         MCAST_HNDLR = MulticastHandler()
 
-        # Set the default BB port if not provided
-        if not db.get('bbr_port'):
-            db.set('bbr_port', DEFS.PORT_BB)
-
         # Set All Network BBRs multicast address as per 9.4.8.1
         all_network_bbrs = NETWORK.get_prefix_based_mcast(
             db.get('dongle_prefix'), 3)

@@ -8,7 +8,7 @@ import kibra
 import kibra.database as db
 from kibra.ktask import Ktask
 from kibra.network import dongle_conf
-from kibra.thread import TLV
+from kibra.thread import DEFS, TLV
 from kibra.tlv import ThreadTLV
 from kitools import kidfu, kifwu, kiserial
 
@@ -57,14 +57,14 @@ def ncp_fw_update(current_fw):
     ver_num = kibra.__kinosver__.split(' v')[-1]
     for file_name in importlib_resources.contents(NCP_FW_FOLDER):
         if ver_num in file_name:
-            # TODO: This relies on the file name, we could also check the file 
+            # TODO: This relies on the file name, we could also check the file
             # contents to make sure
             dfu_file = file_name
             break
     if not dfu_file:
         logging.error('Required NCP firmware not present.')
         return
-    
+
     # Flash the NCP and re-enable it
     with importlib_resources.path(NCP_FW_FOLDER, dfu_file) as dfu_path:
         logging.warn('NCP will be updated with firmware v%s' % ver_num)
@@ -78,6 +78,7 @@ def ncp_fw_update(current_fw):
 
     # Find the NCP again
     enable_ncp()
+
 
 def enable_ncp():
     '''Find the device and initialize the port'''
@@ -233,33 +234,24 @@ def bbr_dataset_update():
     Update Thread BBR Service Data
     Automatically increases the sequence number
     '''
-    THREAD_ENTERPRISE_NUMBER = 44970
-    THREAD_SERVICE_DATA_BBR = '01'
-    THREAD_SERVICE_DATA_FMT = '!BHI'
-    BBR_DEF_SEQ_NUM = 0
-    BBR_DEF_REREG_DELAY = 4
-    BBR_DEF_MLR_TIMEOUT = 3600
-
     # Increase sequence number
-    bbr_sequence_number = db.get('bbr_seq') or BBR_DEF_SEQ_NUM
-    bbr_sequence_number = (bbr_sequence_number + 1) % 0xff
+    bbr_sequence_number = (db.get('bbr_seq') + 1) % 0xff
 
     # Build s_server_data
-    reregistration_delay = db.get('rereg_delay') or BBR_DEF_REREG_DELAY
-    mlr_timeout = db.get('mlr_timeout') or BBR_DEF_MLR_TIMEOUT
-    s_server_data = struct.pack(THREAD_SERVICE_DATA_FMT, bbr_sequence_number,
+    reregistration_delay = db.get('rereg_delay')
+    mlr_timeout = db.get('mlr_timeout')
+    s_server_data = struct.pack(DEFS.THREAD_SERVICE_DATA_FMT, bbr_sequence_number,
                                 reregistration_delay, mlr_timeout)
 
     # Store used values
     db.set('bbr_seq', bbr_sequence_number)
-    db.set('rereg_delay', reregistration_delay)
-    db.set('mlr_timeout', mlr_timeout)
+
     # Make them persistent
     db.save()
 
     # Enable BBR
-    send_cmd('config service add %u %s %s' % (THREAD_ENTERPRISE_NUMBER,
-                                              THREAD_SERVICE_DATA_BBR,
+    send_cmd('config service add %u %s %s' % (DEFS.THREAD_ENTERPRISE_NUMBER,
+                                              DEFS.THREAD_SERVICE_DATA_BBR,
                                               bytes(s_server_data).hex()))
     logging.info('BBR update: Seq. = %d MLR Timeout = %d, Rereg. Delay = %d' %
                  (bbr_sequence_number, mlr_timeout, reregistration_delay))

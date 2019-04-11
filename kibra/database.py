@@ -5,11 +5,17 @@ import re
 from collections import OrderedDict
 from threading import RLock
 
+import kibra
+from kibra.thread import DEFS
+
+DEF_COMMCRED = 'KIRALE'
+DEF_DONGLENAME = 'Test'
+
 CFG_PATH = '/opt/kirale/'
 CFG_FILE = CFG_PATH + 'kibra.cfg'
 LOG_FILE = CFG_PATH + 'kibra.log'
 # Default configuration
-CFG = {'dongle_name': 'Test', 'dongle_commcred': 'KIRALE'}
+CFG = {}
 # User configuration read from file
 CFG_USER = {}
 
@@ -34,22 +40,22 @@ DB_ITEMS = {
     'all_domain_bbrs': [str, None, lambda x: True, True, False],
     'all_network_bbrs': [str, None, lambda x: True, True, False],
     'autostart': [int, 0, lambda x: x in (0, 1), True, False],
-    'bagent_port': [int, None, lambda x: True, False, False],
-    'bbr_port': [int, 5683, lambda x: x >= 0 and x < 0xffff, False, False],
-    'bbr_seq': [int, 0, lambda x: x >= 0 and x < 0xff, False, True],
+    'bagent_port': [int, DEFS.PORT_MC, lambda x: True, False, False],
+    'bbr_port': [int, DEFS.PORT_BB, lambda x: x >= 0 and x < 0xffff, False, False],
+    'bbr_seq': [int, DEFS.BBR_SEQ, lambda x: x >= 0 and x < 0xff, False, True],
     'bbr_status': [str, None, lambda x: True, False, False],
     'bridging_mark': [int, None, lambda x: True, False, False],
     'bridging_table': [str, None, lambda x: True, False, False],
     'dhcp_pool': [str, None, lambda x: True, False, False],
     'discovered': [int, 0, lambda x: x in (0, 1), True, False],
     'dongle_channel': [int, None, lambda x: True, True, False],
-    'dongle_commcred': [str, None, lambda x: True, True, True],
+    'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],
     'dongle_eid': [str, None, lambda x: True, False, False],
     'dongle_emac': [str, None, lambda x: True, True, False],
     'dongle_ll': [str, None, lambda x: True, False, False],
     'dongle_mac': [str, None, lambda x: True, False, False],
-    'dongle_name': [str, None, lambda x: True, True, True],
+    'dongle_name': [str, DEF_DONGLENAME, lambda x: True, True, True],
     'dongle_netkey': [str, None, lambda x: True, True, False],
     'dongle_netname': [str, None, lambda x: True, True, False],
     'dongle_outband': [str, None, lambda x: True, True, False],
@@ -70,21 +76,21 @@ DB_ITEMS = {
     'exterior_ipv6': [str, None, lambda x: True, False, False],
     'exterior_ipv6_ll': [str, None, lambda x: True, False, False],
     'exterior_mac': [str, None, lambda x: True, False, False],
-    'exterior_port_mc': [int, None, lambda x: True, False, False],
+    'exterior_port_mc': [int, DEFS.PORT_MC, lambda x: True, False, False],
     'interior_ifname': [str, None, lambda x: True, False, False],
     'interior_ifnumber': [int, None, lambda x: True, False, False],
     'interior_mac': [str, None, lambda x: True, False, False],
-    'kibra_vendor': [str, None, lambda x: True, False, False],
-    'kibra_model': [str, None, lambda x: True, False, False],
-    'kibra_version': [str, None, lambda x: True, False, False],
+    'kibra_vendor': [str, kibra.__vendor__, lambda x: True, False, False],
+    'kibra_model': [str, kibra.__model__, lambda x: True, False, False],
+    'kibra_version': [str, 'KiBRA v%s' % kibra.__version__, lambda x: True, False, False],
     'maddrs_perm': [str, None, lambda x: True, False, False],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mlr_cache': [str, None, lambda x: True, False, False],
-    'mlr_timeout': [int, 3600, lambda x: x >= 300 and x < 0xffffffff, True, True],
+    'mlr_timeout': [int, DEFS.BBR_DEF_MLR_TIMEOUT, lambda x: x >= 300 and x < 0xffffffff, True, True],
     'pool4': [str, None, lambda x: True, False, False],
     'prefix': [str, None, lambda x: True, False, False],
-    'rereg_delay': [int, 5, lambda x: x >= 1 and x < 0xffff, True, True],
+    'rereg_delay': [int, DEFS.BBR_DEF_REREG_DELAY, lambda x: x >= 1 and x < 0xffff, True, True],
     'serial_device': [str, None, lambda x: True, False, False],
     'status_coapserver': [str, None, lambda x: True, False, False],
     'status_dhcp': [str, None, lambda x: True, False, False],
@@ -154,6 +160,16 @@ def load():
             os.makedirs(CFG_PATH, exist_ok=True)
             with open(CFG_FILE, 'w') as json_db:
                 json.dump(CFG, json_db)
+
+    # Set default missing values
+    for key in DB_ITEMS.keys():
+        def_val = DB_ITEMS[key][DB_ITEMS_DEF]
+        if def_val != None and not has_keys([key]):
+            print(key, def_val)
+            set(key, def_val)
+
+    # Save modified file
+    save()
 
 
 def dump():

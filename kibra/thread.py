@@ -1,3 +1,6 @@
+import random
+
+
 class TLV():
     M_SOURCE_ADDRESS = 0
     M_MODE = 1
@@ -173,10 +176,18 @@ class URI():
 
 class DEFS():
     PORT_COAP = 5683
-    PORT_MC = 19779
+    PORT_MC = 49191
     PORT_MM = 61631
-    PORT_BB = 5683 # TODO: SPEC-836 --> 61632
+    PORT_BB = 5683  # TODO: SPEC-836 --> 61632
     MIN_MLR_TIMEOUT = 300
     DUA_DAD_QUERY_TIMEOUT = 1
     DUA_DAD_REPEAT = 3
     DUA_RECENT_TIME = 20
+    BBR_SEQ = random.randint(0, 255)
+    THREAD_ENTERPRISE_NUMBER = 44970
+    THREAD_SERVICE_DATA_BBR = '01'
+    THREAD_SERVICE_DATA_FMT = '!BHI'
+
+    # Not defined by Thread
+    BBR_DEF_REREG_DELAY = 6
+    BBR_DEF_MLR_TIMEOUT = 3600
