@@ -91,6 +91,9 @@ def get_records():
             records['xp'] = db.get('dongle_xpanid').replace('0x', '')
     elif 'none - saved configuration' in dongle_status:
         status = IFACE_CFG
+        if mode == DTLS_PSKC:
+            records['nn'] = db.get('dongle_netname')
+            records['xp'] = db.get('dongle_xpanid').replace('0x', '')
     else:
         status = IFACE_OFF
         if mode == DTLS_PSKC:
