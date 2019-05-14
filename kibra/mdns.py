@@ -131,11 +131,11 @@ class MDNS(Ktask):
         self.nat_enabled = False
 
     async def periodic(self):
-        if not self.nat_enabled and db.has_keys(['dongle_rloc']):
+        if not self.nat_enabled and db.get('status_nat') == 'running':
             # Enable NAT
             logging.info('Enabling Border Agent NAT.')
-            nat_start('I')
             self.nat_enabled = True
+            nat_start('I')
 
         self.service_update()
 
@@ -174,13 +174,13 @@ class MDNS(Ktask):
         if self.nat_enabled:
             # Disnable NAT
             logging.info('Disabling Border Agent NAT.')
+            self.nat_enabled = False
             nat_start('D')
 
         # Disable service
         logging.info('Removing Avahi service.')
-        bash('service avahi-daemon stop')
         bash('rm /etc/avahi/services/%s.service' % db.get('dongle_name'))
-        bash('service avahi-daemon start')
+        bash('service avahi-daemon reload')
 
     def service_update(self):
         r_txt = '\t\t<txt-record>%s=%s</txt-record>'
@@ -229,5 +229,5 @@ class MDNS(Ktask):
         if snw != sod:
             with open(str(file_name), 'w') as file_:
                 file_.write(snw)
-            bash('service avahi-daemon restart')
+            bash('service avahi-daemon reload')
             logging.info('mDNS service updated.')
