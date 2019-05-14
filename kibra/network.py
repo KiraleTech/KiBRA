@@ -353,18 +353,27 @@ def _ifdown():
 
 
 def dongle_route_enable(prefix):
-    IPR.route(
-        'replace',
-        family=AF_INET6,
-        dst=prefix,
-        oif=db.get('interior_ifnumber'))
-    #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+    try:
+        IPR.route(
+            'replace',
+            family=AF_INET6,
+            dst=prefix,
+            oif=db.get('interior_ifnumber'))
+        #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+    except:
+        logging.warning('Route for %s could not be enabled' % prefix)
 
 
 def dongle_route_disable(prefix):
-    IPR.route(
-        'del', family=AF_INET6, dst=prefix, oif=db.get('interior_ifnumber'))
-    #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+    try:
+        IPR.route(
+            'del',
+            family=AF_INET6,
+            dst=prefix,
+            oif=db.get('interior_ifnumber'))
+        #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+    except:
+        logging.warning('Route for %s could not be disabled' % prefix)
 
 
 class NETWORK(Ktask):
