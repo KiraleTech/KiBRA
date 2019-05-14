@@ -14,8 +14,8 @@ def _nat_enable():
         bash('jool global update logging-session true')
         bash('jool global update logging-bib true')
     logging.info('Prefix 64:ff9b::/96 added to NAT64 engine.')
-    bash('jool pool4 add --udp %s 10000-30000' % db.get('exterior_ipv4'))
-    bash('jool pool4 add --icmp %s 10000-30000' % db.get('exterior_ipv4'))
+    bash('jool pool4 add --udp %s 10000-50000' % db.get('exterior_ipv4'))
+    bash('jool pool4 add --icmp %s 10000-50000' % db.get('exterior_ipv4'))
     logging.info('%s used as stateful NAT64 masking address.',
                  db.get('exterior_ipv4'))
     KSH.prefix_handle('route', 'add', '64:ff9b::/96', stable=True)
@@ -24,7 +24,7 @@ def _nat_enable():
 def _nat_disable():
     KSH.prefix_handle('route', 'remove', '64:ff9b::/96', stable=True)
     if db.has_keys(['exterior_ipv4']):
-        bash('jool pool4 remove --udp %s 10000-30000' %
+        bash('jool pool4 remove --udp %s 10000-50000' %
              db.get('exterior_ipv4'))
         bash('jool pool4 remove --icmp %s' % db.get('exterior_ipv4'))
     bash('/sbin/modprobe -r jool')
