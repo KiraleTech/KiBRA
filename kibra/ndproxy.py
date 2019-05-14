@@ -170,6 +170,7 @@ class NDProxy():
         if solicited:
             #await asyncio.sleep(delay/1000)
             time.sleep(random.randint(64, 128) / 1000)
+            #TODO: no sleep if DUA appears in the EID-to-RLOC Map Cache
             flags |= 1 << S
         else:
             # Set Override flag if registration was recent
