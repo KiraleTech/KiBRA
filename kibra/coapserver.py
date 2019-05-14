@@ -71,6 +71,9 @@ class DUAEntry():
         # Indicates DAD is in progress
         self.dad = True
 
+        # Indicates that the entry should be deleted after the DAD process
+        self.delete = False
+
     def update(self, elapsed):
         self.reg_time = datetime.datetime.now().timestamp() - elapsed
 
@@ -234,9 +237,8 @@ class Res_N_MR(resource.Resource):
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
                 dst = '%s%%%s' % (db.get('all_network_bbrs'),
                                   db.get('exterior_ifname'))
-                client = CoapClient()                  
-                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR,
-                                              payload)
+                client = CoapClient()
+                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
                 client.stop()
                 del client
 
@@ -309,24 +311,33 @@ class DUAHandler():
         await client.non_request(dst, DEFS.PORT_BB, URI.B_BQ, payload)
 
     async def send_pro_bb_ntf(self, dua):
-        await self.send_ntf_msg(
+        # Find the ML-EID that registered this DUA
+        eid, elapsed, _ = DUA_HNDLR.find_eid(dua)
+
+        payload = await self.send_ntf_msg(
             db.get('all_domain_bbrs'), DEFS.PORT_BB, URI.B_BA, aiocoap.NON,
-            dua)
+            dua, eid, elapsed)
+
+        logging.info('out pro_bb_ntf : %s' % ThreadTLV.sub_tlvs_str(payload))
 
     async def send_bb_ans(self, dst, dua, rloc16=None):
-        await self.send_ntf_msg(
-            dst, DEFS.PORT_BB, URI.B_BA, aiocoap.CON, dua, rloc16=rloc16)
+        # Find the ML-EID that registered this DUA
+        eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
 
-    async def send_addr_ntf_ans(self, dst, dua, eid, rloc16, elapsed):
-        await self.send_ntf_msg(
-            dst,
-            DEFS.PORT_MM,
-            URI.A_AN,
-            aiocoap.CON,
-            dua,
-            eid=eid,
-            rloc16=rloc16,
-            elapsed=elapsed)
+        # Don't send if DAD is still going
+        if eid is None or dad is not False:
+            return
+
+        payload = await self.send_ntf_msg(dst, DEFS.PORT_BB, URI.B_BA,
+                                          aiocoap.CON, dua, eid, elapsed,
+                                          rloc16)
+        logging.info('out bb_ans : %s' % ThreadTLV.sub_tlvs_str(payload))
+
+    async def send_addr_ntf_ans(self, dst, dua, eid, elapsed, rloc16):
+        payload = await self.send_ntf_msg(dst, DEFS.PORT_MM, URI.A_AN,
+                                          aiocoap.CON, dua, eid, elapsed,
+                                          rloc16)
+        logging.info('out addr_ntf_ans : %s' % ThreadTLV.sub_tlvs_str(payload))
 
     async def send_ntf_msg(self,
                            dst,
@@ -334,16 +345,9 @@ class DUAHandler():
                            uri,
                            mode,
                            dua,
-                           eid=None,
-                           rloc16=None,
-                           elapsed=None):
-        if eid is None:
-            # Find the ML-EID that registered this DUA
-            eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
-
-            # Don't send if DAD is still going
-            if eid is None or dad is not False:
-                return
+                           eid,
+                           elapsed,
+                           rloc16=None):
 
         # Fill TLVs
         # Target EID TLV
@@ -365,11 +369,11 @@ class DUAHandler():
         payload += ThreadTLV(
             t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name).array()
 
-        logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
         if mode == aiocoap.CON:
             await COAP_CLIENT.con_request(dst, port, uri, payload)
         else:
             await COAP_CLIENT.non_request(dst, port, uri, payload)
+        return payload
 
     async def send_addr_err(self, dua, eid_iid, dst_iid):
         'Thread 1.2 5.23.3.6.4'
@@ -389,7 +393,7 @@ class DUAHandler():
                                       payload)
 
     async def perform_dad(self, entry):
-        client = CoapClient()                  
+        client = CoapClient()
         # Send BB.qry DUA_DAD_REPEAT times
         for _ in range(DEFS.DUA_DAD_REPEAT):
             await self.send_bb_query(client, entry.dua)
@@ -397,21 +401,21 @@ class DUAHandler():
 
             # Finsih process if duplication was detected meanwhile
             if not entry.dad:
-                logging.info('DUA %s was duplicated, removing...' % entry.dua)
-                self.remove_entry(entry)
-                client.stop()
-                del client
-                return
+                break
         client.stop()
         del client
 
         # Set DAD flag as finished
         entry.dad = False
 
-        # Announce successful registration to other BBRs
-        self.announce(entry)
+        if entry.delete:
+            logging.info('DUA %s was duplicated, removing...' % entry.dua)
+            self.remove_entry(entry)
+        else:
+            # Announce successful registration to other BBRs
+            self.announce(entry)
 
-    def duplicated_found(self, dua):
+    def duplicated_found(self, dua, delete=False):
         '''
         Change the DAD flag for this entry, so that the ongoing DAD process
         removes it
@@ -419,6 +423,7 @@ class DUAHandler():
         for entry in self.entries:
             if dua == entry.dua:
                 entry.dad = False
+                entry.delete = delete
 
     def announce(self, entry):
         # Send PRO_BB.ntf (9.4.8.4.4)
@@ -603,17 +608,26 @@ class Res_B_BA(resource.Resource):
 
         # See if its response to DAD or ADDR_QRY
         if not rloc16:
-            # Check if DAD is pending
-            entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
-            if entry_eid is None or dad is not True:
-                # Not expecting an answer for this DUA
+            entry_eid, entry_elapsed, dad = DUA_HNDLR.find_eid(dua)
+            if not entry_eid:
+                # Nothing to do for this EID
                 return COAP_NO_RESPONSE
+            elif dad is True:
+                if entry_elapsed < elapsed:
+                    # This DUA is still registered somewhere else
+                    DUA_HNDLR.duplicated_found(dua, delete=False)
+                    # Send PRO_BB.ntf
+                    asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(dua))
+                else:
+                    # Duplication detected during DAD
+                    DUA_HNDLR.duplicated_found(dua, delete=True)
+                    # Send ADDR_ERR.ntf
+                    asyncio.ensure_future(
+                        DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
             else:
-                # Duplication detected!
-                DUA_HNDLR.duplicated_found(dua)
-                # Send ADDR_ERR.ntf
-                asyncio.ensure_future(
-                    DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
+                # This DUA has been registered somewhere else more recently
+                # Remove silently
+                DUA_HNDLR.remove_entry(dua=dua)
         else:
             # Send ADDR_NTF.ans
             bbr_rloc16 = ipaddress.IPv6Address(
