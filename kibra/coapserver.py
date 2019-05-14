@@ -31,9 +31,6 @@ MCAST_HNDLR = None
 #COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
 COAP_NO_RESPONSE = None
 
-# Use a single CoAP client for the Backbone notifications
-COAP_CLIENT = CoapClient()
-
 # Limit the number of DUA registrations managed by this BBR
 DUA_LIMIT = 768
 
@@ -240,7 +237,6 @@ class Res_N_MR(resource.Resource):
                 client = CoapClient()
                 await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
                 client.stop()
-                del client
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
@@ -265,8 +261,14 @@ class DUAHandler():
         # Start the ND Proxy daemon
         self.ndproxy = NDProxy()
 
+        # CoAP client used for address notifications
+        self.ntf_client = CoapClient()
+
     def stop(self):
         self.ndproxy.stop()
+        if self.ntf_client is not None:
+            self.ntf_client.stop()
+            self.ntf_client = None
 
     def reg_update(self, eid, dua, elapsed):
         old_entry = None
@@ -314,11 +316,9 @@ class DUAHandler():
         # Find the ML-EID that registered this DUA
         eid, elapsed, _ = DUA_HNDLR.find_eid(dua)
 
-        payload = await self.send_ntf_msg(
+        await self.send_ntf_msg(
             db.get('all_domain_bbrs'), DEFS.PORT_BB, URI.B_BA, aiocoap.NON,
             dua, eid, elapsed)
-
-        logging.info('out pro_bb_ntf : %s' % ThreadTLV.sub_tlvs_str(payload))
 
     async def send_bb_ans(self, dst, dua, rloc16=None):
         # Find the ML-EID that registered this DUA
@@ -328,16 +328,12 @@ class DUAHandler():
         if eid is None or dad is not False:
             return
 
-        payload = await self.send_ntf_msg(dst, DEFS.PORT_BB, URI.B_BA,
-                                          aiocoap.CON, dua, eid, elapsed,
-                                          rloc16)
-        logging.info('out bb_ans : %s' % ThreadTLV.sub_tlvs_str(payload))
+        await self.send_ntf_msg(dst, DEFS.PORT_BB, URI.B_BA, aiocoap.CON, dua,
+                                eid, elapsed, rloc16)
 
     async def send_addr_ntf_ans(self, dst, dua, eid, elapsed, rloc16):
-        payload = await self.send_ntf_msg(dst, DEFS.PORT_MM, URI.A_AN,
-                                          aiocoap.CON, dua, eid, elapsed,
-                                          rloc16)
-        logging.info('out addr_ntf_ans : %s' % ThreadTLV.sub_tlvs_str(payload))
+        await self.send_ntf_msg(dst, DEFS.PORT_MM, URI.A_AN, aiocoap.CON, dua,
+                                eid, elapsed, rloc16)
 
     async def send_ntf_msg(self,
                            dst,
@@ -368,12 +364,14 @@ class DUAHandler():
         net_name = db.get('dongle_netname').encode()
         payload += ThreadTLV(
             t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name).array()
+        logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
 
         if mode == aiocoap.CON:
-            await COAP_CLIENT.con_request(dst, port, uri, payload)
+            await self.ntf_client.con_request(dst, port, uri, payload)
         else:
-            await COAP_CLIENT.non_request(dst, port, uri, payload)
-        return payload
+            client = CoapClient()
+            await client.non_request(dst, port, uri, payload)
+            client.stop()
 
     async def send_addr_err(self, dua, eid_iid, dst_iid):
         'Thread 1.2 5.23.3.6.4'
@@ -389,8 +387,8 @@ class DUAHandler():
         logging.info(
             'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
-        await COAP_CLIENT.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
-                                      payload)
+        await self.ntf_client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
+                                 payload)
 
     async def perform_dad(self, entry):
         client = CoapClient()
@@ -403,7 +401,6 @@ class DUAHandler():
             if not entry.dad:
                 break
         client.stop()
-        del client
 
         # Set DAD flag as finished
         entry.dad = False
@@ -558,8 +555,7 @@ class Res_B_BQ(resource.Resource):
 
         # Send BB.ans to the requester
         src_addr = request.remote.sockaddr[0]
-        asyncio.ensure_future(
-            DUA_HNDLR.send_bb_ans(src_addr, dua, rloc16=rloc16))
+        await DUA_HNDLR.send_bb_ans(src_addr, dua, rloc16=rloc16)
 
         return COAP_NO_RESPONSE
 
@@ -685,7 +681,9 @@ class Res_A_AQ(resource.Resource):
 
         # TODO: mantain a cache
         # Propagate Address Query to the Backbone
-        await DUA_HNDLR.send_bb_query(COAP_CLIENT, dua, rloc16)
+        client = CoapClient()
+        await DUA_HNDLR.send_bb_query(client, dua, rloc16)
+        client.stop()
 
         return COAP_NO_RESPONSE
 
