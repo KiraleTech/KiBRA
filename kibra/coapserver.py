@@ -387,8 +387,8 @@ class DUAHandler():
         logging.info(
             'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
-        await self.ntf_client.con_request(dst.compressed, DEFS.PORT_MM, URI.A_AE,
-                                 payload)
+        await self.ntf_client.con_request(dst.compressed, DEFS.PORT_MM,
+                                          URI.A_AE, payload)
 
     async def perform_dad(self, entry):
         client = CoapClient()
@@ -640,8 +640,10 @@ class Res_B_BA(resource.Resource):
                     dst, dua, eid=eid, rloc16=bbr_rloc16, elapsed=elapsed))
 
         # ACK
-        #return COAP_NO_RESPONSE
-        return aiocoap.message.Message(no_response=24)
+        if request.mtype == aiocoap.NON:
+            return COAP_NO_RESPONSE
+        else:
+            return aiocoap.message.Message(no_response=24)
 
 
 class Res_A_AQ(resource.Resource):
@@ -767,31 +769,99 @@ class COAPSERVER(Ktask):
                                                   db.get('interior_ifnumber'))
 
         # Thread side server
-        logging.info('Launching CoAP Server in MM port')
-        self.server_mm = CoapServer(
-            # TODO: bind to RLOC, LL, Realm-Local All-Routers, all_network_bbrs and all_domain_bbrs
-            addr='::',
-            port=DEFS.PORT_MM,
-            resources=[(URI.tuple(URI.N_DR), Res_N_DR()),
-                       (URI.tuple(URI.N_MR), Res_N_MR()),
-                       (URI.tuple(URI.A_AQ), Res_A_AQ()),
-                       (URI.tuple(URI.A_AE), Res_A_AE())])
-        logging.info('Launching CoAP Server in MC port')
-        self.server_mc = CoapServer(
-            # TODO: bind to both RLOC and LL
-            addr='::',
-            port=DEFS.PORT_MC,
-            resources=[(URI.tuple(URI.N_MR), Res_N_MR())])
-        logging.info('Launching CoAP Server in BB port')
-        self.server_bb = CoapServer(
-            # TODO: bind Res_B_BMR to all_network_bbrs
-            # TODO: bind Res_B_BQ to all_domain_bbrs
-            # TODO: bind Res_B_BA to exterior link-local
-            addr='::',
-            port=db.get('bbr_port'),
-            resources=[(URI.tuple(URI.B_BMR), Res_B_BMR()),
-                       (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                       (URI.tuple(URI.B_BA), Res_B_BA())])
+        self.coap_servers = []
+
+        logging.info('Launching CoAP Servers in MM port')
+        # TODO: bind to RLOC, LL, Realm-Local All-Routers
+        '''
+        # Bind to RLOC
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('dongle_rloc'),
+                port=DEFS.PORT_MM,
+                resources=[(URI.tuple(URI.N_DR), Res_N_DR()),
+                           (URI.tuple(URI.N_MR), Res_N_MR()),
+                           (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                           (URI.tuple(URI.A_AE), Res_A_AE())]))
+        # Bind to LL
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('dongle_ll'),
+                port=DEFS.PORT_MM,
+                resources=[(URI.tuple(URI.N_DR), Res_N_DR()),
+                           (URI.tuple(URI.N_MR), Res_N_MR()),
+                           (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                           (URI.tuple(URI.A_AE), Res_A_AE())]))
+        '''
+        self.coap_servers.append(
+            CoapServer(
+                addr='::',
+                port=DEFS.PORT_MM,
+                resources=[(URI.tuple(URI.N_DR), Res_N_DR()),
+                           (URI.tuple(URI.N_MR), Res_N_MR()),
+                           (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                           (URI.tuple(URI.A_AE), Res_A_AE())]))
+
+        logging.info('Launching CoAP Servers in MC port')
+        # Bind to RLOC
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('dongle_rloc'),
+                port=DEFS.PORT_MC,
+                resources=[(URI.tuple(URI.N_MR), Res_N_MR())]))
+        # Bind to LL
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('dongle_ll'),
+                port=DEFS.PORT_MC,
+                resources=[(URI.tuple(URI.N_MR), Res_N_MR())]))
+        # Bind to exterior LL
+        if db.has_keys(['exterior_ipv6_ll']):
+            self.coap_servers.append(
+                CoapServer(
+                    addr=db.get('exterior_ipv6_ll'),
+                    port=DEFS.PORT_MC,
+                    resources=[(URI.tuple(URI.N_MR), Res_N_MR())]))
+        # Bind to exterior IPv4
+        if db.has_keys(['exterior_ipv4']):
+            self.coap_servers.append(
+                CoapServer(
+                    addr=db.get('exterior_ipv4'),
+                    port=DEFS.PORT_MC,
+                    resources=[(URI.tuple(URI.N_MR), Res_N_MR())]))
+
+        logging.info('Launching CoAP Servers in BB port')
+        '''
+        # Bind Res_B_BMR to all_network_bbrs
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('all_network_bbrs'),
+                port=db.get('bbr_port'),
+                resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())]))
+        # Bind Res_B_BQ to all_domain_bbrs
+        self.coap_servers.append(
+            CoapServer(
+                addr='%s%%%s' % (db.get('all_domain_bbrs'),
+                                 db.get('exterior_ifname')),
+                port=db.get('bbr_port'),
+                resources=[(URI.tuple(URI.B_BQ), Res_B_BQ())]))
+        # Bind Res_B_BA to exterior link-local
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('exterior_ipv6_ll'),
+                port=db.get('bbr_port'),
+                resources=[(URI.tuple(URI.B_BA), Res_B_BA())]))
+        '''
+        self.coap_servers.append(
+            CoapServer(
+                # TODO: bind Res_B_BMR to all_network_bbrs
+                # TODO: bind Res_B_BQ to all_domain_bbrs
+                # TODO: bind Res_B_BA to exterior link-local
+                addr='::',
+                port=db.get('bbr_port'),
+                resources=[(URI.tuple(URI.B_BMR), Res_B_BMR()),
+                           (URI.tuple(URI.B_BQ), Res_B_BQ()),
+                           (URI.tuple(URI.B_BA), Res_B_BA())]))
 
         if dua_prefix:
             KSH.prefix_handle(
@@ -804,12 +874,10 @@ class COAPSERVER(Ktask):
                 dp=True)
 
     def kstop(self):
-        logging.info('Stopping CoAP Server in MM port')
-        self.server_mm.stop()
-        logging.info('Stopping CoAP Server in MC port')
-        self.server_mc.stop()
-        logging.info('Stopping CoAP Server in BB port')
-        self.server_bb.stop()
+        logging.info('Stopping CoAP servers')
+        for server in self.coap_servers:
+            server.stop()
+            del server
 
         all_network_bbrs = db.get('all_network_bbrs')
         logging.info('Leaving All Network BBRs group: %s' % all_network_bbrs)
