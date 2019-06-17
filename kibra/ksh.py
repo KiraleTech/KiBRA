@@ -203,7 +203,19 @@ def _dongle_get_config():
     db.set('dongle_heui64', send_cmd('show heui64')[0])
 
     # Get mesh rloc and link local addresses
-    addrs = send_cmd('show ipaddr')
+    all_addrs = send_cmd('show ipaddr')
+
+    # Remove not registered addresses
+    addrs = []
+    for line in all_addrs:
+        try:
+            state, addr = line.split(' ')
+            if state == '[R]':
+                addrs.append(addr)
+        except:
+            # Old versions don't include registration information
+            addrs.append(line)
+
     for ip6_addr in addrs:
         if ip6_addr.startswith('ff'):
             # KiNOS registers multicast addresses with MLR.req
