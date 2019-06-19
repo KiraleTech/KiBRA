@@ -59,8 +59,9 @@ and makes use of several PyPI modules, apart from the `KiTools
 Debian Buster and Raspbian Buster systems, but it will probably run correctly
 in many other GNU/Linux distributions.
 
-The required system packages are: ``dibbler-server``, ``iproute2``,
-``ip6tables``, ``jool``, ``ntp``, ``radvd`` and ``unbound``.
+The required system packages are: ``avahi-daemon``, ``dibbler-server``, 
+``iproute2``, ``ip6tables``, ``jool``, ``nmap``, ``ntp``, ``radvd`` and 
+``unbound``.
 
 The required Python modules are: ``aiocoap``, ``bash``, ``kitools`` and 
 ``pyroute2``.
@@ -71,7 +72,7 @@ Installation
 Install and configure system packages.
 ::
 
- apt install git python3 python3-pip avahi-daemon dibbler-server ntp unbound
+ apt install avahi-daemon dibbler-server ntp radvd unbound virtualenv -y
  echo "" > /etc/dibbler/server.conf
 
 There is no official Debian package for Jool yet, so it needs to be compiled
