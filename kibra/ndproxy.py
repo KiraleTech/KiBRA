@@ -155,11 +155,14 @@ class NDProxy():
             # Establish route
             NETWORK.dongle_route_enable(dua)
         else:
-            # Remove route
-            NETWORK.dongle_route_disable(dua)
+            try:
+                # Remove route
+                NETWORK.dongle_route_disable(dua)
 
-            # Remove DUA from the list
-            self.duas.pop(dua)
+                # Remove DUA from the list
+                self.duas.pop(dua)
+            except:
+                logging.warning('Unable to remove unknown DUA %s' % dua)
 
     def send_na(self, dst, tgt, solicited=True):
         R = 31
