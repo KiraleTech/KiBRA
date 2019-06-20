@@ -21,8 +21,6 @@ class DNS(Ktask):
             period=1)
 
     def kstart(self):
-        # Stop DNS daemon
-        bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration
         db.del_from_file(DNS_CONFIG, '\nserver:','\n    dns64-synthall: yes\n')
         # Add new configuration
@@ -35,15 +33,13 @@ class DNS(Ktask):
             file_.write('\n    dns64-synthall: yes\n')
         # Allow for the file to be stored
         sleep(0.2)
-        # Start DNS daemon
-        bash('service %s start' % DNS_DAEMON)
+        # Reload DNS daemon
+        bash('service %s reload' % DNS_DAEMON)
 
     def kstop(self):
-        # Stop DNS daemon
-        bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration for this dongle
         db.del_from_file(DNS_CONFIG, '\nserver:','\n    dns64-synthall: yes\n')
         # Allow for the file to be stored
         sleep(0.2)
-        # Start DNS daemon
-        bash('service %s start' % DNS_DAEMON)
+        # Reload DNS daemon
+        bash('service %s reload' % DNS_DAEMON)
