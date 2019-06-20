@@ -39,13 +39,16 @@ class CoapServer():
     '''CoAP Server'''
 
     def __init__(self, addr, port, resources):
-        root = aiocoap.resource.Site()
-        for res in resources:
-            root.add_resource(res[0], res[1])
+        self.root = aiocoap.resource.Site()
+        self.resources = resources
+        for res in self.resources:
+            self.root.add_resource(res[0], res[1])
+        self.context = aiocoap.Context()
         self.task = asyncio.Task(
-            aiocoap.Context.create_server_context(root, bind=(addr, port)))
+            self.context.create_server_context(self.root, bind=(addr, port)))
 
     def stop(self):
+        self.context.shutdown()
         self.task.cancel()
 
 
@@ -191,7 +194,7 @@ class Res_N_MR(resource.Resource):
         logging.info('in %s req: %s' % (URI.N_MR, in_pload))
 
         # BBR Primary/Secondary status
-        if 'primary' not in db.get('bbr_status'):
+        if not 'primary' in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
         else:
             timeout = None
@@ -315,6 +318,8 @@ class DUAHandler():
     async def send_pro_bb_ntf(self, dua):
         # Find the ML-EID that registered this DUA
         eid, elapsed, _ = DUA_HNDLR.find_eid(dua)
+        if not eid:
+            return
 
         await self.send_ntf_msg(
             db.get('all_domain_bbrs'), DEFS.PORT_BB, URI.B_BA, aiocoap.NON,
@@ -877,7 +882,6 @@ class COAPSERVER(Ktask):
         logging.info('Stopping CoAP servers')
         for server in self.coap_servers:
             server.stop()
-            del server
 
         all_network_bbrs = db.get('all_network_bbrs')
         logging.info('Leaving All Network BBRs group: %s' % all_network_bbrs)
