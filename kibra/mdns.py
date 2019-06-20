@@ -186,8 +186,12 @@ class MDNS(Ktask):
         r_txt = '\t\t<txt-record>%s=%s</txt-record>'
         r_bin = '\t\t<txt-record value-format="binary-hex">%s=%s</txt-record>'
 
-        records = get_records()
-        hostname = socket.gethostname()
+        try:
+            records = get_records()
+            hostname = socket.gethostname()
+        except:
+            logging.warning('Unable to get the mDNS records.')
+            return
         # Compose the new service data
         snw = []
         snw.append('<?xml version="1.0" encoding="utf-8" standalone="no"?>')
