@@ -46,4 +46,5 @@ class CoapClient():
             return response.payload
 
     def stop(self):
-        self.context.shutdown()
+        if self.context is not None:
+            self.context.shutdown()
