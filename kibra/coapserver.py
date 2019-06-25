@@ -55,6 +55,7 @@ class CoapServer():
 class DMStatus():
     # Defined statuses
     ST_SUCESS = 0
+    ST_DUA_REREGISTER = 1
     ST_INV_ADDR = 2
     ST_DUP_ADDR = 3
     ST_RES_SHRT = 4
@@ -266,6 +267,9 @@ class DUAHandler():
 
         # CoAP client used for address notifications
         self.ntf_client = CoapClient()
+
+        # Used by Thread Harness to force the next DUA.req status response
+        self.next_status = None
 
     def stop(self):
         self.ndproxy.stop()
@@ -494,7 +498,11 @@ class Res_N_DR(resource.Resource):
                 elapsed = struct.unpack('!I', value)[0]
 
             if eid and dua:
-                if DUA_HNDLR.reg_update(eid, dua, elapsed):
+                # Thread Harness may force response status
+                if DUA_HNDLR.next_status != None:
+                    status = DUA_HNDLR.next_status
+                    DUA_HNDLR.next_status = None
+                elif DUA_HNDLR.reg_update(eid, dua, elapsed):
                     status = DMStatus.ST_SUCESS
                 else:
                     # Duplication detected (resource shortage not contemplated)

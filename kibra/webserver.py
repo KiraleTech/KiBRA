@@ -14,6 +14,7 @@ import xml.etree.ElementTree
 
 import kibra
 import kibra.database as db
+from kibra.coapserver import DUA_HNDLR
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
@@ -149,6 +150,14 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 data = 'OK'
             elif self.path.startswith('/mdnsqry'):
                 bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
+                data = 'OK'
+            elif self.path.startswith('/duastatus'):
+                DUA_HNDLR.next_status = req.get('nxt')
+                data = 'OK'
+            elif self.path.startswith('/coap'):
+                DUA_HNDLR.ntf_client.con_request(
+                    req.get('dst'), req.get('prt'),
+                    req.get('uri'), req.get('pld'))
                 data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
