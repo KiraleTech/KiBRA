@@ -14,7 +14,7 @@ import xml.etree.ElementTree
 
 import kibra
 import kibra.database as db
-from kibra.coapserver import DUA_HNDLR
+import kibra.coapserver as coap_server
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
@@ -27,6 +27,7 @@ LEASES_PATH = '/var/lib/dibbler/server-AddrMgr.xml'
 
 ANNOUNCER = None
 HTTPD = None
+LOOP = None
 
 IPPROTO_IPV6 = 41
 
@@ -152,12 +153,10 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
                 data = 'OK'
             elif self.path.startswith('/duastatus'):
-                DUA_HNDLR.next_status = req.get('nxt')
+                db.set('dua_next_status', req.get('nxt')[0])
                 data = 'OK'
             elif self.path.startswith('/coap'):
-                DUA_HNDLR.ntf_client.con_request(
-                    req.get('dst'), req.get('prt'),
-                    req.get('uri'), req.get('pld'))
+                db.set('coap_req', req)
                 data = 'OK'
             elif self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
@@ -244,7 +243,9 @@ class HDP_Announcer():
 
 
 def start():
-    global HTTPD, ANNOUNCER
+    global HTTPD, ANNOUNCER, LOOP
+
+    LOOP = asyncio.get_event_loop()
 
     print('Loading web server...')
     while not HTTPD:
@@ -254,7 +255,7 @@ def start():
             HTTPD = V6Server(('', WEB_PORT), WebServer)
         except OSError:
             time.sleep(1)
-    asyncio.get_event_loop().run_in_executor(None, HTTPD.serve_forever)
+    LOOP.run_in_executor(None, HTTPD.serve_forever)
     print('Webserver is up')
 
     props = {
@@ -266,7 +267,7 @@ def start():
     props['add'] = db.get('exterior_ipv6_ll')
     props['por'] = WEB_PORT
     ANNOUNCER = HDP_Announcer()
-    asyncio.get_event_loop().run_in_executor(None, ANNOUNCER.start, props)
+    LOOP.run_in_executor(None, ANNOUNCER.start, props)
     print('BBR announced via HDP')
 
 

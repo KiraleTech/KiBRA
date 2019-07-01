@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import ipaddress
+import json
 import logging
 import os
 import socket
@@ -50,6 +51,7 @@ class CoapServer():
     def stop(self):
         self.context.shutdown()
         self.task.cancel()
+        #TODO: https://github.com/chrysn/aiocoap/issues/156
 
 
 class DMStatus():
@@ -267,9 +269,6 @@ class DUAHandler():
 
         # CoAP client used for address notifications
         self.ntf_client = CoapClient()
-
-        # Used by Thread Harness to force the next DUA.req status response
-        self.next_status = None
 
     def stop(self):
         self.ndproxy.stop()
@@ -499,9 +498,9 @@ class Res_N_DR(resource.Resource):
 
             if eid and dua:
                 # Thread Harness may force response status
-                if DUA_HNDLR.next_status != None:
-                    status = DUA_HNDLR.next_status
-                    DUA_HNDLR.next_status = None
+                if db.get('dua_next_status'):
+                    status = int(db.get('dua_next_status'))
+                    db.set('dua_next_status', '')
                 elif DUA_HNDLR.reg_update(eid, dua, elapsed):
                     status = DMStatus.ST_SUCESS
                 else:
@@ -749,7 +748,7 @@ class COAPSERVER(Ktask):
             stop_keys=['all_network_bbrs'],
             start_tasks=['serial', 'network', 'diags'],
             stop_tasks=[],
-            period=5)
+            period=0.5)
 
     def kstart(self):
         global DUA_HNDLR
@@ -888,8 +887,8 @@ class COAPSERVER(Ktask):
 
     def kstop(self):
         logging.info('Stopping CoAP servers')
-        for server in self.coap_servers:
-            server.stop()
+        for coap_server in self.coap_servers:
+            coap_server.stop()
 
         all_network_bbrs = db.get('all_network_bbrs')
         logging.info('Leaving All Network BBRs group: %s' % all_network_bbrs)
@@ -922,3 +921,19 @@ class COAPSERVER(Ktask):
 
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()
+
+        # Thread Harness support
+        coap_con_request()
+    
+
+def coap_con_request():
+    req_str = db.get('coap_req')
+    if req_str:
+        db.set('coap_req', '')
+        req = json.loads(req_str.replace("'", '"'))
+        dst = req.get('dst')[0]
+        prt = int(req.get('prt')[0])
+        uri = req.get('uri')[0]
+        pld = bytes.fromhex(req.get('pld')[0])
+        logging.info('out %s ntf: %s' % (uri, ThreadTLV.sub_tlvs_str(pld)))
+        asyncio.ensure_future(DUA_HNDLR.ntf_client.con_request(dst, prt, uri, pld))
