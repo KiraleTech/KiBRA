@@ -180,22 +180,6 @@ def _configure():
         send_cmd('clear')
         _configure()
 
-    # TODO: remove this
-    time.sleep(1)
-    '''
-    # Wait until the dongle is a router
-    logging.info('Waiting until dongle becomes router...')
-    db.set('dongle_role', 'none')
-    # Selection jitter 120 s
-    SERIAL_DEV.wait_for('role', ['router', 'leader'])
-
-    # A non-router device can't be border router
-    if send_cmd('show role')[0] not in ('router', 'leader'):
-        send_cmd('clear')
-        SERIAL_DEV.wait_for('status', ['none'])
-        _configure()
-    '''
-
 
 def _dongle_get_config():
     db.set('dongle_role', send_cmd('show role')[0])
@@ -356,7 +340,7 @@ class SERIAL(Ktask):
         dongle_conf()
         _configure()
         _dongle_get_config()
-        bbr_dataset_update()
+        #bbr_dataset_update()
         _bagent_on()
 
     def kstop(self):
