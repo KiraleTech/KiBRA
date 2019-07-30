@@ -11,7 +11,6 @@ class CoapClient():
 
     def __init__(self):
         self.context = None
-        self.busy = False
 
     async def con_request(self, addr, port, path, payload=''):
         return await self.request(addr, port, path, aiocoap.CON, payload)
