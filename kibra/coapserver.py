@@ -11,7 +11,6 @@ import time
 import aiocoap
 import aiocoap.resource as resource
 import kibra.database as db
-import kibra.ksh as KSH
 import kibra.network as NETWORK
 from aiocoap.numbers.codes import Code
 from aiocoap.numbers.types import Type
@@ -679,7 +678,7 @@ class Res_A_AQ(resource.Resource):
             return COAP_NO_RESPONSE
 
         # Don't process requests for different prefixes than DUA
-        dua_prefix = ipaddress.IPv6Address(db.get('dua_prefix').split('/')[0])
+        dua_prefix = ipaddress.IPv6Address(db.get('prefix').split('/')[0])
         if dua.packed[:8] != dua_prefix.packed[:8]:
             return COAP_NO_RESPONSE
 
@@ -727,7 +726,7 @@ class Res_A_AE(resource.Resource):
             return COAP_NO_RESPONSE
 
         # Don't process notifications for different prefixes than DUA
-        dua_prefix = ipaddress.IPv6Address(db.get('dua_prefix').split('/')[0])
+        dua_prefix = ipaddress.IPv6Address(db.get('prefix').split('/')[0])
         if dua.packed[:8] != dua_prefix.packed[:8]:
             return COAP_NO_RESPONSE
 
@@ -766,10 +765,9 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
         # TODO: update it if dongle_prefix changes
 
-        dua_prefix = db.get('dua_prefix')
-        if dua_prefix:
+        if db.get('prefix_dua'):
             # Set All Domain BBRs multicast address as per 9.4.8.1
-            all_domain_bbrs = NETWORK.get_prefix_based_mcast(dua_prefix, 3)
+            all_domain_bbrs = NETWORK.get_prefix_based_mcast(db.get('prefix'), 3)
             db.set('all_domain_bbrs', all_domain_bbrs)
             logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
             MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
@@ -875,15 +873,6 @@ class COAPSERVER(Ktask):
                            (URI.tuple(URI.B_BQ), Res_B_BQ()),
                            (URI.tuple(URI.B_BA), Res_B_BA())]))
 
-        if dua_prefix:
-            KSH.prefix_handle(
-                'prefix',
-                'add',
-                dua_prefix,
-                stable=True,
-                on_mesh=True,
-                default=True,
-                dp=True)
 
     def kstop(self):
         logging.info('Stopping CoAP servers')
@@ -895,17 +884,7 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR.mcrouter.join_leave_group('leave', all_network_bbrs)
 
         db.set('bbr_status', 'off')
-        dua_prefix = db.get('dua_prefix')
-        if dua_prefix:
-            KSH.prefix_handle(
-                'prefix',
-                'remove',
-                dua_prefix,
-                stable=True,
-                on_mesh=True,
-                default=True,
-                dp=True)
-
+        if db.get('prefix_dua'):
             all_domain_bbrs = db.get('all_domain_bbrs')
             logging.info('Leaving All Domain BBRs group: %s' % all_domain_bbrs)
             MCAST_HNDLR.mcrouter.join_leave_group('leave', all_domain_bbrs)

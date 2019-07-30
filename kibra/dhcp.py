@@ -4,7 +4,6 @@ from time import sleep
 import kitools
 
 import kibra.database as db
-import kibra.ksh as KSH
 from kibra.ktask import Ktask
 from kibra.network import dongle_route_disable, dongle_route_enable
 from kibra.shell import bash
@@ -28,17 +27,19 @@ class DHCP(Ktask):
             self,
             name='dhcp',
             start_keys=[
-                'dhcp_pool', 'interior_ifname', 'dongle_rloc', 'interior_mac'
+                'prefix', 'interior_ifname', 'dongle_rloc', 'interior_mac'
             ],
             stop_keys=['interior_ifname'],
             start_tasks=['network', 'serial'],
             period=2)
 
     def kstart(self):
+        # Don't start if DHCP is not to be used
+        if not db.get('prefix_dhcp'):
+            return
+
         # Stop DHCP daemon
         bash(DHCP_DAEMON + ' stop')
-        # Add route
-        dongle_route_enable(db.get('dhcp_pool'))
         # Remove previous configuration for this dongle
         db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'),
                          '\n}\n')
@@ -59,7 +60,7 @@ class DHCP(Ktask):
             file_.write('\t\tT2 0\n')
             file_.write('\t\tpreferred-lifetime 1500\n')
             file_.write('\t\tvalid-lifetime 1800\n')
-            file_.write('\t\tpool ' + db.get('dhcp_pool') + '\n')
+            file_.write('\t\tpool ' + db.get('prefix') + '\n')
             file_.write('\t}\n')
             #file_.write('\tclient duid ' + db.get('dongle_mac') + ' {\n')
             #file_.write('\t\taddress ' + db.get('dhcp_server') + '\n')
@@ -69,26 +70,15 @@ class DHCP(Ktask):
         sleep(0.2)
         # Start DHCP daemon
         bash(DHCP_DAEMON + ' start')
-        # Announce prefix in the Thread network
-        KSH.prefix_handle(
-            'prefix',
-            'add',
-            db.get('dhcp_pool'),
-            stable=True,
-            on_mesh=True,
-            dhcp=True,
-            default=True)
+
+        # TODO: assign DHCP ALOC
+
 
     def kstop(self):
-        # Remove prefix from the Thread network# Announce prefix in the Thread network
-        KSH.prefix_handle(
-            'prefix',
-            'remove',
-            db.get('dhcp_pool'),
-            stable=True,
-            on_mesh=True,
-            dhcp=True,
-            default=True)
+        # Don't stop if DHCP is not to be used
+        if not db.get('prefix_dhcp'):
+            return
+
         # Stop DHCP daemon
         bash(DHCP_DAEMON + ' stop')
         # Remove previous configuration for this dongle
@@ -97,6 +87,6 @@ class DHCP(Ktask):
         # Allow for the file to be stored
         sleep(0.2)
         # Remove route
-        dongle_route_disable(db.get('dhcp_pool'))
+        dongle_route_disable(db.get('prefix'))
         # Start DHCP daemon
         bash(DHCP_DAEMON + ' start')

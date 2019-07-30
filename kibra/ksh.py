@@ -7,7 +7,7 @@ import time
 import kibra
 import kibra.database as db
 from kibra.ktask import Ktask
-from kibra.network import dongle_conf
+from kibra.network import dongle_conf, dongle_route_enable
 from kibra.thread import DEFS, TLV
 from kibra.tlv import ThreadTLV
 from kitools import kidfu, kifwu, kiserial
@@ -74,6 +74,8 @@ def ncp_fw_update(current_fw):
         except Exception as exc:
             logging.error('Problem updating NCP firmware: %s' % exc)
             return
+        # Allow for new firmware to be applied
+        time.sleep(10)
     logging.info('NCP updated successfully.')
 
     # Find the NCP again
@@ -337,13 +339,33 @@ class SERIAL(Ktask):
             period=2)
 
     def kstart(self):
+        db.set('prefix_active', 0)
         dongle_conf()
         _configure()
         _dongle_get_config()
-        #bbr_dataset_update()
         _bagent_on()
 
     def kstop(self):
+        if db.get('prefix_active'):         
+            # Remove prefix from the network
+            dp = True if db.get('prefix_dua') else False
+            dhcp = True if db.get('prefix_dhcp') else False
+            slaac = True if not dp and not dhcp else False
+
+            prefix_handle(
+                'prefix',
+                'remove',
+                db.get('prefix'),
+                stable=True,
+                on_mesh=True,
+                default=True,
+                slaac=slaac,
+                dhcp=dhcp,
+                dp=dp)
+            
+            # Mark prefix as active
+            db.set('prefix_active', 0)
+
         _bagent_off()
         send_cmd('ifdown')
 
@@ -356,3 +378,34 @@ class SERIAL(Ktask):
                           db.get('serial_device'))
             self.kstop()
             self.kill()
+        
+        if not db.get('prefix_active'):
+            dp = True if db.get('prefix_dua') else False
+            dhcp = True if db.get('prefix_dhcp') else False
+            slaac = True if not dp and not dhcp else False
+
+            # Don't continue if servers are not running
+            if dhcp and db.get('status_dhcp') not in 'running':
+                return
+            if dp and db.get('status_coapserver') not in 'running':
+                return
+            
+            # Add route
+            dongle_route_enable(db.get('prefix'))
+
+            # Announce prefix to the network
+            prefix_handle(
+                'prefix',
+                'add',
+                db.get('prefix'),
+                stable=True,
+                on_mesh=True,
+                default=True,
+                slaac=slaac,
+                dhcp=dhcp,
+                dp=dp)
+            
+            bbr_dataset_update()
+
+            # Mark prefix as active
+            db.set('prefix_active', 1)

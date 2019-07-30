@@ -188,27 +188,6 @@ def dongle_conf():
     # This is only useful when more than one interior interface is used
     #db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
 
-    # Load or generate the Pool4 prefix
-    if not db.has_keys(['pool4']):
-        # Default Kirale NAT IPv4 pool, with room for 64k nodes (>32*512).
-        # Last byte of the interior MAC is used to compose the IPv4 network
-        # address
-        db.set(
-            'pool4', '10.' + str(
-                int(db.get('interior_mac').split(':')[-1], 16)) + '.0.0/16')
-    elif int(db.get('pool4').split('/')[1]) % 8 != 0:
-        raise Exception('Error: Pool4 prefix length must be a 8 multiple.')
-
-    # Compose the DHCPv6 pool: global prefix + pool4
-    if db.has_keys(['prefix']):
-        net4 = ipaddress.ip_network(db.get('pool4'))
-        net6 = ipaddress.ip_network(db.get('prefix'))
-        shift = 2**(96 - net6.prefixlen)
-        dhcp = ipaddress.ip_address(int(net6[0]) + shift * int(net4[0]))
-        dhcp_pool = ipaddress.ip_network(
-            str(dhcp) + '/' + str(net4.prefixlen + net6.prefixlen))
-        db.set('dhcp_pool', str(dhcp_pool))
-
 
 def _get_rt_tables():
     rt_tables = {}
@@ -409,5 +388,4 @@ class NETWORK(Ktask):
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
-
         # TODO: detect changes in addresses

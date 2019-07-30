@@ -1,12 +1,14 @@
 import asyncio
 import copy
-import logging
-import time
 import ipaddress
+import logging
+import math
+import time
 
 import kibra.database as db
 import kibra.network as NETWORK
 from kibra.coapclient import CoapClient
+from kibra.iptables import netmap
 from kibra.ktask import Ktask
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
@@ -118,9 +120,9 @@ class DIAGS(Ktask):
                     node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
                 self._parse_diags(response)
                 time.sleep(0.2)
-            '''
             self._mark_old_nodes()
-            
+            '''
+
     def _parse_diags(self, tlvs):
         now = _epoch_ms()
         json_node_info = {}
@@ -278,10 +280,12 @@ class DIAGS(Ktask):
                 db.set('dongle_secpol', value.hex())
 
     def _parse_net_data(self, tlvs):
+        is_pbbr = False
         value = ThreadTLV.get_value(tlvs, TLV.D_NETWORK_DATA)
         if value:
             for tlv in ThreadTLV.sub_tlvs(value):
-                if tlv.type >> 1 is TLV.N_SERVICE:
+                type_ = tlv.type >> 1
+                if type_ is TLV.N_SERVICE:
                     # Detect BBR Dataset encoding
                     if (tlv.value[0] >> 7 and tlv.value[1] is 1
                             and tlv.value[2] is 1):
@@ -292,10 +296,37 @@ class DIAGS(Ktask):
                             node_rloc = ipaddress.IPv6Address(
                                 db.get('dongle_rloc')).packed
                             if node_rloc[14:16] == server_tlvs[0].value[0:2]:
-                                if 'primary' not in db.get('bbr_status'):
-                                    logging.info('Setting this BBR as Primary')
-                                db.set('bbr_status', 'primary')
-                                return
+                                is_pbbr = True
+                elif type_ is TLV.N_PREFIX:
+                    if db.get('prefix_dhcp') and not db.get('dhcp_aloc'):
+                        # Detect DHCPv6 Agent ALOC
+                        length = math.ceil(tlv.value[1]/8)
+                        byt_prefix = tlv.value[2:2+length] + bytes(length)
+                        int_prefix = int.from_bytes(byt_prefix, byteorder='big')
+                        str_prefix = ipaddress.IPv6Address(int_prefix).compressed
+                        str_prefix += '/%s' % tlv.value[1]
+                        if str_prefix == db.get('prefix'):
+                            # This is the prefix that we announced
+                            for subtlv in ThreadTLV.sub_tlvs(tlv.value[(length+2):]):
+                                # TODO: verify that there is a Border Router TLV
+                                # matching our RLOC16 and DHCP flag
+                                if subtlv.type >> 1 is TLV.N_6LOWPAN_ID:
+                                    cid = subtlv.value[0] & 0x0f
+                                    rloc = db.get('dongle_rloc')
+                                    aloc = list(ipaddress.IPv6Address(rloc).packed)
+                                    aloc[14] = 0xfc
+                                    aloc[15] = cid
+                                    aloc = ipaddress.IPv6Address(bytes(aloc)).compressed
+                                    db.set('dhcp_aloc', aloc)
+                                    # Listen to the DHCP ALOC which is going to be
+                                    # used by BR MTD children
+                                    netmap(aloc, rloc)
+        
+        if is_pbbr:
+            if 'primary' not in db.get('bbr_status'):
+                logging.info('Setting this BBR as Primary')
+            db.set('bbr_status', 'primary')
+        else:
             if 'secondary' not in db.get('bbr_status'):
                 logging.info('Setting this BBR as Secondary')
-        db.set('bbr_status', 'secondary')
+            db.set('bbr_status', 'secondary')
