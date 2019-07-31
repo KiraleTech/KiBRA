@@ -52,7 +52,7 @@ setup(
     include_package_data=True,
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'aiocoap==0.4a1',
+        'aiocoap==kirale-1.0',
         'bash==0.6',
         'daemonize==2.5.0',
         'importlib_resources==1.0.2',  # Not needed in Python 3.7
