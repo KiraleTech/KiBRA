@@ -36,8 +36,10 @@ ICMP6_FILTER = 1
 ND_NEIGHBOR_SOLICIT = 135
 ND_NEIGHBOR_ADVERTISEMENT = 136
 
-ns_fmt = '!BBHI16s'  # type, code, cksum, flags, ns_target
-opt_fmt = '!BB%ss'
+NS_FMT = '!BBHI16s'  # type, code, cksum, flags, ns_target
+OPT_FMT = '!BB%ss'
+
+EXT_IPV6_ADDRS = []
 
 
 def icmp6_filter_setpass(filter_, type_):
@@ -111,16 +113,21 @@ class NDProxy():
                 continue
 
             # Get the paramters
-            _, _, _, _, tgt = struct.unpack(ns_fmt,
-                                            data[:struct.calcsize(ns_fmt)])
+            _, _, _, _, tgt = struct.unpack(NS_FMT,
+                                            data[:struct.calcsize(NS_FMT)])
 
             # Debug
             ns_tgt = ipaddress.IPv6Address(tgt).compressed
             logging.info('in ns from %s for %s' % (src[0], ns_tgt))
 
             # Generate Neighbor Advertisement
-            addrs = list(self.duas.keys()) + NETWORK.get_addrs(
-                ext_ifname, socket.AF_INET6)
+            try:
+                EXT_IPV6_ADDRS = NETWORK.get_addrs(ext_ifname, socket.AF_INET6)
+            except:
+                # pyroute2.netlink.exceptions.NetlinkError:
+                #  (16, 'Device or resource busy')
+                pass
+            addrs = list(self.duas.keys()) + EXT_IPV6_ADDRS
             if ns_tgt in addrs:
                 self.send_na(src[0], ns_tgt)
 
@@ -186,19 +193,19 @@ class NDProxy():
 
         # Fill header
         tgt_bytes = ipaddress.IPv6Address(tgt).packed
-        header = struct.pack(ns_fmt, ND_NEIGHBOR_ADVERTISEMENT, 0, 0, flags,
+        header = struct.pack(NS_FMT, ND_NEIGHBOR_ADVERTISEMENT, 0, 0, flags,
                              tgt_bytes)
 
         # Set Target Link-Layer Address option
         idx = db.get('exterior_ifnumber')
         eui48 = NETWORK.get_eui48(idx)
         eui48 = bytes.fromhex(eui48.replace(':', ''))
-        opts = struct.pack(opt_fmt % len(eui48), 2, math.ceil(len(eui48) / 8),
+        opts = struct.pack(OPT_FMT % len(eui48), 2, math.ceil(len(eui48) / 8),
                            eui48)
 
         # Set the checksum
         cksum = checksum(header + opts)
-        header = struct.pack(ns_fmt, ND_NEIGHBOR_ADVERTISEMENT, 0, cksum,
+        header = struct.pack(NS_FMT, ND_NEIGHBOR_ADVERTISEMENT, 0, cksum,
                              flags, tgt_bytes)
 
         # Send ICMPv6 packet
