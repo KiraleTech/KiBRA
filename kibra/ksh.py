@@ -215,8 +215,8 @@ def _dongle_get_config():
                 logging.info('RLOC address is %s.', db.get('dongle_rloc'))
             else:
                 # TODO: check prefix
-                db.set('dongle_eid', ip6_addr.strip('\r\n'))
-                logging.info('EID address is %s.', db.get('dongle_eid'))
+                db.set('dongle_mleid', ip6_addr.strip('\r\n'))
+                logging.info('EID address is %s.', db.get('dongle_mleid'))
     if not db.has_keys(['dongle_rloc']):
         raise Exception('Error: Mesh RLOC not found.')
 

@@ -53,7 +53,7 @@ DB_ITEMS = {
     'dongle_channel': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],
-    'dongle_eid': [str, None, lambda x: True, False, False],
+    'dongle_mleid': [str, None, lambda x: True, False, False],
     'dongle_emac': [str, None, lambda x: True, True, False],
     'dongle_ll': [str, None, lambda x: True, False, False],
     'dongle_mac': [str, None, lambda x: True, False, False],

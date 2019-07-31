@@ -52,8 +52,8 @@ class DHCP(Ktask):
             file_.write('\trapid-commit yes\n')
             # file_.write('\toption 224 address ' + db.get('dongle_rloc') + '\n') # CoAP RD
             #file_.write('\toption 56 duid ' + ntp_server_opt(db.get('dongle_rloc')) + '\n')
-            file_.write('\toption ntp-server ' + db.get('dongle_eid') + '\n')
-            file_.write('\toption dns-server ' + db.get('dongle_eid') + '\n')
+            file_.write('\toption ntp-server ' + db.get('dongle_mleid') + '\n')
+            file_.write('\toption dns-server ' + db.get('dongle_mleid') + '\n')
             file_.write('\tpreference 255\n')
             file_.write('\tclass {\n')
             file_.write('\t\tT1 0\n')

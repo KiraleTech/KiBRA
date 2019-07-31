@@ -230,8 +230,8 @@ def _ifup():
                  db.get('interior_ifname'), db.get('dongle_rloc'))
     IPR.addr('add', index=idx, address=db.get('dongle_rloc'), prefixlen=64)
     logging.info('Configuring interior interface %s with address %s.',
-                 db.get('interior_ifname'), db.get('dongle_eid'))
-    IPR.addr('add', index=idx, address=db.get('dongle_eid'), prefixlen=64)
+                 db.get('interior_ifname'), db.get('dongle_mleid'))
+    IPR.addr('add', index=idx, address=db.get('dongle_mleid'), prefixlen=64)
 
     # Add dongle neighbour
     IPR.neigh(
@@ -251,7 +251,7 @@ def _ifup():
     IPR.neigh(
         'replace',
         family=AF_INET6,
-        dst=db.get('dongle_eid'),
+        dst=db.get('dongle_mleid'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
