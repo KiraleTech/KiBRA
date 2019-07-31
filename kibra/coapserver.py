@@ -28,7 +28,6 @@ IP = IPRoute()
 DUA_HNDLR = None
 MCAST_HNDLR = None
 
-#COAP_NO_RESPONSE = aiocoap.message.Message(no_response=26)
 COAP_NO_RESPONSE = None
 
 # Limit the number of DUA registrations managed by this BBR
@@ -654,7 +653,7 @@ class Res_B_BA(resource.Resource):
         if request.mtype == aiocoap.NON:
             return COAP_NO_RESPONSE
         else:
-            return aiocoap.message.Message(no_response=24)
+            return aiocoap.Message(mtype=Type.ACK, code=Code.CHANGED)
 
 
 class Res_A_AQ(resource.Resource):
