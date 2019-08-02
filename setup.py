@@ -5,11 +5,10 @@ https://packaging.python.org/en/latest/distributing.html
 https://github.com/pypa/sampleproject
 '''
 
-# To use a consistent encoding
 from codecs import open as copen
 from os import path
 
-# Always prefer setuptools over distutils
+import kibra
 from setuptools import setup
 
 # Get the long description from the README file
@@ -20,7 +19,7 @@ with copen(path.join(HERE, 'README.rst'), encoding='utf-8') as _file:
 setup(
     name='kibra',
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.0.0',
+    version=kibra.__version__,
     description='Kirale Border Router Administration',
     long_description=LONG_DESC,
     # The project's main homepage.
@@ -49,12 +48,16 @@ setup(
         'Operating System :: POSIX :: Linux'
     ],
     keywords='kirale kinos thread border router',
-    packages=['kibra'],
+    packages=['kibra', 'kibra.ncp_fw'],
     include_package_data=True,
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'kitools', 'bash', 'pyroute2', 'python-iptables', 'aiocoap',
-        'pycryptodomex'
+        'aiocoap==kirale-1.0',
+        'bash==0.6',
+        'daemonize==2.5.0',
+        'importlib_resources==1.0.2',  # Not needed in Python 3.7
+        'kitools==1.3.2',
+        'pyroute2==0.5.3',
     ],
     entry_points={'console_scripts': ['kibra = kibra.__main__:main']},
 )

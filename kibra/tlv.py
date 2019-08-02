@@ -13,17 +13,14 @@ class ThreadTLV():
             self.data.append(t)
             self.data.append(l)
             if l > 0:
-                if isinstance(v, str):
-                    self.data.extend(bytearray.fromhex(v))
-                else:
-                    raise Exception('Bad data.')
+                self.data.extend(bytearray(v))
         else:
             raise Exception('Bad data.')
 
         self.type = int(self.data[0])
+        # TODO: extended length
         self.length = int(self.data[1])
-        if self.length > 0:
-            self.value = self.data[2:]
+        self.value = self.data[2:]
 
     def __str__(self):
         result = '%3u | %3u |' % (self.type, self.length)
@@ -40,7 +37,9 @@ class ThreadTLV():
     def sub_tlvs(data=None):
         '''Generate ThreadTLV objects with the contents of the current TLV'''
         tlvs = []
-        if isinstance(data, str):
+        if not data:
+            return tlvs
+        elif isinstance(data, str):
             data = bytearray.fromhex(data)
         elif isinstance(data, bytes):
             data = bytearray(data)
@@ -54,3 +53,20 @@ class ThreadTLV():
             tlvs.append(ThreadTLV(data[:size]))
             data = data[size:]
         return tlvs
+    
+    @staticmethod
+    def sub_tlvs_str(payload):
+        sub_tlvs = ThreadTLV.sub_tlvs(payload)
+        result = ''
+        for tlv in sub_tlvs:
+            result += '{ %s } ' % tlv
+        return result
+
+    @staticmethod
+    def get_value(data, type_):
+        '''Return the array value of the TLV of type type_ from data'''
+        for tlv in ThreadTLV.sub_tlvs(data):
+            if tlv.type == type_:
+                # TODO: check size depending on the type
+                return tlv.value
+        return None

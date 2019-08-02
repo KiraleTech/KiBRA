@@ -3,19 +3,13 @@ Kirale Border Router Administration (KiBRA)
 ===========================================
 
 This project intends to be a reference implementation of a `Thread
-<https://www.threadgroup.org/>`_ Border Router for a `GNU/Linux Debian
+<https://www.threadgroup.org/>`_ 1.2 Backbone Border Router for a `GNU/Linux Debian
 <https://www.debian.org/>`_ host and a `KiNOS <http://kinos.io/>`_ USB enabled
 device.
 
-It is written in Python 3.6, and provides a fast way for third-party developers
+It is written in Python 3, and provides a fast way for third-party developers
 to test they Thread products´ site and global connectivity, or an starting
 point for a commercial Border Router implementation.
-
-Although it of course runs in single-board computers like `Raspberry Pi
-<https://www.raspberrypi.org/>`_ or `Beagle Board <https://beagleboard.org/>`_,
-there is not even need to purchase any additional hardware apart from a
-`KTDG102 USB Dongle <https://www.kirale.com/products/ktdg102/>`_ thanks to the
-provided Virtual Machine Image Disk which can be run in any modern computer.
 
 This project is licensed under the terms of the MIT license.
 
@@ -24,16 +18,16 @@ This project is licensed under the terms of the MIT license.
 Features
 ========
 
-- Autodetects an attached KiNOS device and uses it as Thread interface.
-- Autodetects the exterior interface configuration (default route), but it is
-  also possible to manually set the configuration.
+- Thread Domains support.
+- Multicast forwarding support.
 - DHCPv6 server (`Dibbler <http://klub.com.pl/dhcpv6/>`_) autoconfiguration for
   DHCPv6-PD or ULA prefixes.
 - NTP client and server, advertised to the Thread network in the DHCP options.
 - Stateful NAT64 (`Jool <https://www.jool.mx/>`_) autoconfguration.
 - DNS64 server (`Unbound <http://www.unbound.net/>`_).
-- mDNS (`Avahi <https://www.avahi.org/>`_) advertisement of MeshCoP Border
-  Agent service in the exterior network, with support for external commissioner.
+- mDNS (`Python Zeroconf <https://github.com/jstasiak/python-zeroconf>`_) 
+  advertisement of MeshCoP Border Agent service in the exterior network, with 
+  support for external commissioner.
 - Thread network real-time supervision with Thread Management Framework using a
   CoAP client (`aiocoap <https://www.avahi.org/>`_).
 - Web based dynamic network visualization.
@@ -45,7 +39,6 @@ Features
 Future improvements
 ===================
 
-- ``systemd`` integration.
 - `Port Control Protocol <https://datatracker.ietf.org/wg/pcp/documents/>`_
 - Web based network configuration and commissioning.
 - Multi-Thread interface support.
@@ -53,18 +46,18 @@ Future improvements
 Requirements
 ============
 
-The KiBRA application requires a `Python <https://python.org>`_ 3.6 installation
+The KiBRA application requires a `Python <https://python.org>`_ 3.7 installation
 and makes use of several PyPI modules, apart from the `KiTools
 <https://github.com/KiraleTechnologies/KiTools>`_ module. It has been tested in
 Debian Buster and Raspbian Buster systems, but it will probably run correctly
 in many other GNU/Linux distributions.
 
-The required system packages are: ``avahi-daemon`` (from v0.7),
-``dibbler-server``, ``iproute2``, ``ip6tables``, ``jool``, ``ntp`` and
+The required system packages are: ``avahi-daemon``, ``dibbler-server``, 
+``iproute2``, ``ip6tables``, ``jool``, ``nmap``, ``ntp``, ``radvd`` and 
 ``unbound``.
 
-The required Python modules are: ``aiocoap``, ``bash``, ``kitools``,
-``pycryptodomex`` and ``pyroute2``.
+The required Python modules are: ``aiocoap-kirale``, ``bash``, ``daemonize``,
+``kitools`` and ``pyroute2``.
 
 Installation
 ============
@@ -72,36 +65,35 @@ Installation
 Install and configure system packages.
 ::
 
- apt install git python3 python3-pip avahi-daemon dibbler-server ntp unbound
+ apt install avahi-daemon dibbler-server ntp radvd unbound virtualenv -y
  echo "" > /etc/dibbler/server.conf
 
-There is no official Debian package for Jool yet, so it needs to be compiled
-from sources.
+There is no official Debian package for Jool yet, so it needs to be built as
+explained in the `Jool packaging repository
+<https://github.com/ydahhrk/packaging/tree/master/Jool>`_ and later installed:
 ::
 
- cd
- apt install gcc make pkg-config libnl-genl-3-dev autoconf dkms linux-headers-$(uname -r) debhelper
- wget https://github.com/NICMx/releases/raw/master/Jool/Jool-3.5.6.zip
- unzip Jool-3.5.6.zip
- dkms install Jool-3.5.6
- cd Jool-3.5.6/usr
- bash autogen.sh && ./configure && make && make install
- cd && rm Jool-3.5.6.zip
+ apt install jool-dkms_*.deb jool-tools_*.deb -y
+ apt install /tmp/overlay/kibra/deb/jool-tools_4.0.3-1_armhf.deb
 
 Enable a virtual environment for the Python installation.
 ::
 
- pip3 install virtualenv
- python3 -m virtualenv -p /usr/bin/python3.6 py36env
- cd py36env
- source bin/activate
+ apt install virtualenv
+ python3 -m virtualenv -p /usr/bin/python3 /opt/kirale/pyenv
+ source /opt/kirale/pyenv/bin/activate
 
-Download and install KiTools and KiBRA. The required Python modules will be
-auto-installed.
+Download and install KiTools, aiocoap and KiBRA. The required Python modules 
+will be auto-installed.
 ::
 
  git clone https://github.com/KiraleTech/KiTools.git
  cd KiTools
+ python -m pip install --upgrade .
+ cd ..
+ git clone https://github.com/KiraleTech/aiocoap.git
+ cd aiocoap
+ git checkout kirale-1.0
  python -m pip install --upgrade .
  cd ..
  git clone https://github.com/KiraleTech/KiBRA.git
@@ -109,19 +101,24 @@ auto-installed.
  python -m pip install --upgrade .
  cd ..
 
-Reduce the ammount of CoAP traffic generated by TMF subsystem
-(https://github.com/chrysn/aiocoap/issues/75)
+
+''systemd'' integration
+-----------------------
+
+This will make KiBRA run at startup, as soon as system network is enabled:
 ::
 
- unzip lib/python3.6/site-packages/aiocoap-0.4a1-py3.6.egg -d lib/python3.6/site-packages/
- sed -i 's/MAX_RETRANSMIT = 4/MAX_RETRANSMIT = 1/' ./lib/python3.6/site-packages/aiocoap/numbers/constants.py
+ cp systemd/kibra.sh /opt/kirale/
+ cp systemd/kibra.service /etc/systemd/system/
+ systemctl enable kibra.service
 
 
 Usage
 =====
 
-Plug a `KTDG102 USB <https://www.kirale.com/products/ktdg102/>`_ dongle in and
-run the installed script in the virtual environment:
+Plug a `KTDG102 USB <https://www.kirale.com/products/ktdg102/>`_ dongle in (not
+needed if using a KTBRN1) and run the installed script in the virtual
+environment:
 ::
 
  python -m kibra
@@ -167,8 +164,7 @@ The user can also force some other configuration options:
    "dongle_panid": "0xc04b",
    "dongle_role": "leader",
    "dongle_serial": "KTWM102-11+201801+8404D2000000045C"
-   "exterior_ifname": "wlan0",
-   "pool4": "10.92.0.0/16",
+   "exterior_ifname": "eth00",
    "prefix": "2017:0:0:5::/64"
  }
 
@@ -223,31 +219,14 @@ This allows a fast network formation for different testing purposes.
 The ``--clear`` option can be used to clear the configuration of all attached
 KTDG102 USB Dongles, and therefore, remove them from the network.
 
-Kirale Border Router Virtual Machine
+Armbian Image
 ====================================
 
-As a fast way for evaluating the KiNOS devices Thread Border Router
-capabilities, a `Virtual Appliance` is provided ready for usage in a virtual
-machine environment (`VirtualBox <https://www.virtualbox.org/>`_, `VMWare 
-<https://www.vmware.com/>`_...).
-
-⬇⬇⬇ `Kirale-Thread-Border-Router.ova
-<https://drive.google.com/open?id=1ularXx5a-T1iw3Xzc1AkosugqHFkgt5u>`_ ⬇⬇⬇
-
-The image is based on Debian Buster and has the required dependancies installed.
-
-Usage in VirtualBox 5.2.8
--------------------------
-
-From the VirtualBox main screen go to ``File → Import appliance...``, find the
-downloaded file and import it. A new virtual machine will appear in the list and
-can be started. Make sure a network adapter is enabled as *Bridged adapter*
-under ``Network`` settings, and *USB 2.0* is enabled.
-
-The default credentials are:
+It is possible to access to use a serial terminal throught the USB port to 
+access to the system shell. The default credentials are:
 
 :User: ``root``
-:Password: ``kirale``
+:Password: ``kirale123``
 
 You may want to configure keyboard and time zone:
 ::
@@ -257,62 +236,5 @@ You may want to configure keyboard and time zone:
  dpkg-reconfigure keyboard-configuration
  setupcon
 
-The SSH server is enabled by default, in case it is necessary to access the 
-virtual machine from a remote location. Just take note of the DHCP obtained
-address(es) via the virtual netkork adapter:
-::
-
- ip addr
-
-The Python virtual environment is located in ``/root/py36env/`` and contains
-clones from the KiTools and KiBRA repositories. You may want to update them for
-last changes:
-::
-
- cd /root/py36env
- source bin/activate
- cd KiTools
- git pull origin master
- python -m pip install --upgrade .
- cd /root/py36env/KiBRA
- git pull origin master
- python -m pip install --upgrade .
-
-At this point, plug in a KTDG102 USB Dongle to a USB port from the host machine
-and capture it for the virtual machine: right click on the bottom USB icon and
-click on ``Kirale Technologies KTWM102 Module``. Check that the guest machine
-adquired it:
-::
-
- dmesg | tail -n 12
- [   91.616127] usb 2-2: new full-speed USB device number 3 using ohci-pci
- [   91.966133] usb 2-2: New USB device found, idVendor=2def, idProduct=0102
- [   91.966142] usb 2-2: New USB device strings: Mfr=1, Product=2, SerialNumber=3
- [   91.966147] usb 2-2: Product: KTWM102 Module
- [   91.966153] usb 2-2: Manufacturer: Kirale Technologies
- [   91.966158] usb 2-2: SerialNumber: 8404D2000000045C
- [   92.059395] cdc_ether 2-2:1.3 eth0: register 'cdc_ether' at usb-0000:00:06.0-2, CDC Ethernet Device, 84:04:d2:00:04:5c
- [   92.059641] cdc_acm 2-2:1.1: ttyACM0: USB ACM device
- [   92.060069] usbcore: registered new interface driver cdc_ether
- [   92.066109] usbcore: registered new interface driver cdc_acm
- [   92.066111] cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
- [   92.077118] cdc_ether 2-2:1.3 enx8404d200045c: renamed from eth0
-
-Now it is possible to run the KiBRA application:
-::
-
- python -m kibra
-
-USB Troubleshooting
--------------------
-
-It might happen that the Dongle is not captured by the guest machine. 
-In this case, take a look to the `USB Basics and Troubleshooting 
-<https://forums.virtualbox.org/viewtopic.php?f=35&t=82639#p390402>`_ 
-post of the VirtualBox End User forums.
- 
-Specially if USBcap is installed in your Windows host (alogn with Wireshark), 
-the procedure described `here 
-<https://forums.virtualbox.org/viewtopic.php?f=6&t=43541#p195973>`_ 
-might be useful to avoid USBCap taking control of the Dongle once it is released 
-from the host.
+The SSH server is enabled by default, and the preset Ethernet IPv4 address is
+192.168.75.84.

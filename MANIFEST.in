@@ -1,1 +1,2 @@
 recursive-include kibra/public *
+recursive-include kibra/ncp_fw *

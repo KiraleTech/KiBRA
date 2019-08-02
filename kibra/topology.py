@@ -73,9 +73,9 @@ def _join_network(dev, role, oobcom):
         dev.ksh_cmd('clear')
         dev.wait_for('status', ['none'], 5)
     dev.ksh_cmd('config outband')
+    #dev.ksh_cmd('config thver 3')
     for key, param in oobcom.items():
         dev.ksh_cmd('config %s %s' % (key, param))
-    dev.ksh_cmd('config seqguard 0')
     if role == 'sed':
         dev.ksh_cmd('config pollrate %u' % PRATE)
     if role == 'leader' or role == 'reed':
@@ -105,7 +105,7 @@ def form_topology():
             device.set_mac(mac)
             # oobcom['actstamp'] = _get_atimestamp()
             threads.append(
-                Thread(target=_join_network, args=[device, 'reed', oobcom]))
+                Thread(target=_join_network, args=[device, 'fed', oobcom]))
     for thread in threads:
         thread.start()
     for thread in threads:

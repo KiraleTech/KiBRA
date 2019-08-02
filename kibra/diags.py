@@ -1,24 +1,34 @@
 import asyncio
 import copy
+import ipaddress
 import logging
+import math
 import time
-from ipaddress import IPv6Address
-
-from aiocoap import CON, POST, Context, Message
 
 import kibra.database as db
-from kibra.shell import bash
+import kibra.network as NETWORK
+from kibra.coapclient import CoapClient
+from kibra.iptables import netmap
 from kibra.ktask import Ktask
-from kibra.tlv import *
+from kibra.shell import bash
+from kibra.thread import DEFS, TLV, URI
+from kibra.tlv import ThreadTLV
 
-# MAC Addres 16, Route64, Leader Data, IPv6 Address List, Child table
-PET_DIAGS = ThreadTLV(t=18, l=5, v='01 05 06 08 10').array()
-# Channel, PAN ID, Extended PAN ID, Network Name, Network Mesh-Local Prefix,
-# Active Timestamp, Security Policy
-PET_ACT_DATASET = ThreadTLV(t=13, l=7, v='00 01 02 03 07 0c 0e').array()
+VALUES = [
+    TLV.D_MAC_ADDRESS, TLV.D_ROUTE64, TLV.D_LEADER_DATA,
+    TLV.D_IPV6_ADRESS_LIST, TLV.D_CHILD_TABLE
+]
+PET_DIAGS = ThreadTLV(t=TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
 
-URI_D_DG = '/d/dg'
-URI_C_AG = '/c/ag'
+VALUES = [
+    TLV.C_CHANNEL, TLV.C_PAN_ID, TLV.C_EXTENDED_PAN_ID, TLV.C_NETWORK_NAME,
+    TLV.C_NETWORK_MESH_LOCAL_PREFIX, TLV.C_ACTIVE_TIMESTAMP,
+    TLV.C_SECURITY_POLICY
+]
+PET_ACT_DATASET = ThreadTLV(t=TLV.C_GET, l=len(VALUES), v=VALUES).array()
+
+PET_NET_DATA = ThreadTLV(
+    t=TLV.D_TYPE_LIST, l=1, v=[TLV.D_NETWORK_DATA]).array()
 
 NODE_INACTIVE_MS = 90000
 
@@ -29,36 +39,6 @@ def _epoch_ms():
     return int(time.mktime(time.localtime()) * 1000)
 
 
-class DiagnosticPetition():
-    '''Perform COAP petitions to the Thread Diagnostics port'''
-
-    def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        self.protocol = None
-        self.response = None
-
-    async def request(self, addr, path, payload=''):
-        '''Client request'''
-        if self.protocol is None:
-            self.protocol = await Context.create_client_context()
-        req = Message(code=POST, mtype=CON, payload=payload)
-        req.set_request_uri(
-            uri='coap://[%s]:61631%s' % (addr, path), set_uri_host=False)
-        try:
-            response = await self.protocol.request(req).response
-        except Exception:
-            logging.debug('No response from %s', addr)
-            self.response = None
-        else:
-            logging.debug('%s responded with %s.', addr, response.code)
-            self.response = response.payload
-
-    def petition(self, addr, path, payload):
-        '''Petition'''
-        self.loop.run_until_complete(self.request(addr, path, payload))
-        return self.response
-
-
 class DIAGS(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -66,8 +46,8 @@ class DIAGS(Ktask):
             name='diags',
             start_keys=['dongle_ll', 'interior_ifname'],
             start_tasks=['serial', 'network'],
-            period=5)
-        self.petitioner = DiagnosticPetition()
+            period=1)
+        self.petitioner = CoapClient()
         self.br_rloc16 = ''
         self.br_permanent_addr = ''
         self.br_internet_access = 'offline'
@@ -76,65 +56,72 @@ class DIAGS(Ktask):
         self.last_time = 0
 
     def kstart(self):
-        self.br_permanent_addr = '%s%%%s' % (
-            IPv6Address(db.get('dongle_ll')).compressed,
-            db.get('interior_ifname'))
+        ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
+        self.br_permanent_addr = '%s%%%s' % (ll_addr,
+                                             db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
         # Delete old values to prevent MDNS from using them before obtaning
         # the updated ones
         db.delete('dongle_xpanid')
         db.delete('dongle_netname')
+        db.set('bbr_status', 'off')
 
     def kstop(self):
-        self.petitioner.protocol.shutdown()
-        self.petitioner.loop.stop()
+        self.petitioner.stop()
+        #self.petitioner.loop.stop()
 
-    def periodic(self):
+    async def periodic(self):
         # Check internet connection
+        '''
         ping = int(
             str(
                 bash('ping -c 1 -s 0 -I %s -q 8.8.8.8 > /dev/null ; echo $?' %
                      db.get('exterior_ifname'))))
         self.br_internet_access = 'online' if ping is 0 else 'offline'
+        '''
         # Diags
-        response = self.petitioner.petition(self.br_permanent_addr, URI_D_DG,
-                                            PET_DIAGS)
+        response = await self.petitioner.con_request(
+            self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
         if not response:
             return
-        response = ThreadTLV.sub_tlvs(response)
-        for tlv in response:
-            # Save BR RLOC16
-            if tlv.type is 1:
-                self.br_rloc16 = '%02x%02x' % (tlv.value[0], tlv.value[1])
-            # Ignore ID sequence from Route 64 TLV
-            elif tlv.type is 5:
-                tlv.value[0] = 0
-        # More requests if changes found in the network or if some time has passed
-        current_diags = set(str(tlv) for tlv in response)
+
+        # Save BR RLOC16
+        rloc16 = ThreadTLV.get_value(response, TLV.D_MAC_ADDRESS)
+        # TODO: update dongle_rloc and Linux address
+        if rloc16:
+            self.br_rloc16 = '%02x%02x' % (rloc16[0], rloc16[1])
+
+        # More requests if changes found in the network or if some time has
+        # passed
         current_time = _epoch_ms()
-        if current_diags != self.last_diags or current_time > (
+        if response != self.last_diags or current_time > (
                 self.last_time + NODE_INACTIVE_MS):
-            self.last_diags = current_diags
+            self.last_diags = response
             self.last_time = current_time
             self._parse_diags(response)
+            # Network Data get
+            response = await self.petitioner.con_request(
+                self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA)
+            self._parse_net_data(response)
             # Active Data Set get
-            response = self.petitioner.petition(self.br_permanent_addr,
-                                                URI_C_AG, PET_ACT_DATASET)
+            response = await self.petitioner.con_request(
+                self.br_permanent_addr, DEFS.PORT_MM, URI.C_AG,
+                PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
+            # TODO: this is commented not to generate noise in the test captures
+            '''
             for rloc16 in self.nodes_list:
                 if rloc16 == self.br_rloc16:
                     continue
-                node_rloc = IPv6Address(
-                    int(db.get('dongle_prefix') + '000000fffe00' + rloc16,
-                        16)).compressed
-                response = self.petitioner.petition(node_rloc, URI_D_DG,
-                                                    PET_DIAGS)
-                if response:
-                    response = ThreadTLV.sub_tlvs(response)
-                    self._parse_diags(response)
+                node_rloc = NETWORK.get_rloc_from_short(
+                    db.get('dongle_prefix'), rloc16)
+                response = await self.petitioner.con_request(
+                    node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
+                self._parse_diags(response)
                 time.sleep(0.2)
             self._mark_old_nodes()
+            '''
 
     def _parse_diags(self, tlvs):
         now = _epoch_ms()
@@ -143,72 +130,75 @@ class DIAGS(Ktask):
         json_node_info['routes'] = []
         json_node_info['addresses'] = []
         json_node_info['children'] = []
+        leader_rloc16 = None
 
-        for tlv in tlvs:
-            # Address16 TLV
-            if tlv.type is 1:
-                json_node_info['rloc16'] = '%02x%02x' % (tlv.value[0],
-                                                         tlv.value[1])
-                if tlv.value[1] is 0:
-                    json_node_info['roles'].append('router')
-                else:
-                    json_node_info['roles'].append('end-device')
-            # Route 64 TLV
-            elif tlv.type is 5:
-                router_id_mask = bin(
-                    int.from_bytes(tlv.value[1:9], byteorder='big'))
-                router_ids = [
-                    63 - i for i, v in enumerate(router_id_mask[:1:-1])
-                    if int(v)
-                ][::-1]
-                qualities = tlv.value[9:]
-                for router_id in router_ids:
-                    router_quality = int(qualities.pop(0))
-                    q_out = (router_quality & 0xC0) >> 6
-                    q_in = (router_quality & 0x30) >> 4
-                    cost = router_quality & 0x0F
-                    if q_in is not 0 and q_out is not 0:
-                        json_router_info = {}
-                        json_router_info['id'] = '%u' % router_id
-                        json_router_info['target'] = '%04x' % (router_id << 10)
-                        json_router_info['inCost'] = '%u' % q_in
-                        json_node_info['routes'].append(json_router_info)
-                        if json_router_info['target'] not in self.nodes_list:
-                            self.nodes_list.append(json_router_info['target'])
-                    elif q_in is 0 and q_out is 0 and cost is 1:
-                        json_node_info['id'] = '%u' % router_id
-            # Leader Data TLV
-            elif tlv.type is 6:
-                leader_rloc16 = '%04x' % (tlv.value[7] << 10)
-            # IPv6 Address List TLV
-            elif tlv.type is 8:
-                addresses = [
-                    tlv.value[i:i + 16] for i in range(0, tlv.length, 16)
-                ]
-                for addr in addresses:
-                    str_addr = IPv6Address(
-                        int.from_bytes(addr, byteorder='big')).compressed
-                    json_node_info['addresses'].append(str_addr)
+        # Address16 TLV
+        value = ThreadTLV.get_value(tlvs, TLV.D_MAC_ADDRESS)
+        if value:
+            json_node_info['rloc16'] = '%02x%02x' % (value[0], value[1])
+            if value[1] == 0:
+                json_node_info['roles'].append('router')
+            else:
+                json_node_info['roles'].append('end-device')
+        else:
+            return
+
+        # Route 64 TLV
+        value = ThreadTLV.get_value(tlvs, TLV.D_ROUTE64)
+        if value:
+            router_id_mask = bin(int.from_bytes(value[1:9], byteorder='big'))
+            router_ids = [
+                63 - i for i, v in enumerate(router_id_mask[:1:-1]) if int(v)
+            ][::-1]
+            qualities = value[9:]
+            for router_id in router_ids:
+                if not qualities:
+                    break
+                router_quality = int(qualities.pop(0))
+                q_out = (router_quality & 0xC0) >> 6
+                q_in = (router_quality & 0x30) >> 4
+                cost = router_quality & 0x0F
+                if q_in is not 0 and q_out is not 0:
+                    json_router_info = {}
+                    json_router_info['id'] = '%u' % router_id
+                    json_router_info['target'] = '%04x' % (router_id << 10)
+                    json_router_info['inCost'] = '%u' % q_in
+                    json_node_info['routes'].append(json_router_info)
+                    if json_router_info['target'] not in self.nodes_list:
+                        self.nodes_list.append(json_router_info['target'])
+                elif q_in is 0 and q_out is 0 and cost is 1:
+                    json_node_info['id'] = '%u' % router_id
+
+        # Leader Data TLV
+        value = ThreadTLV.get_value(tlvs, TLV.D_LEADER_DATA)
+        if value:
+            leader_rloc16 = '%04x' % (value[7] << 10)
+
+        # IPv6 Address List TLV
+        value = ThreadTLV.get_value(tlvs, TLV.D_IPV6_ADRESS_LIST)
+        if value:
+            addresses = [value[i:i + 16] for i in range(0, len(value), 16)]
+            for addr in addresses:
+                str_addr = ipaddress.IPv6Address(
+                    int.from_bytes(addr, byteorder='big')).compressed
+                json_node_info['addresses'].append(str_addr)
 
         # Now process child info, because json_node_info['rloc16'] is needed
-        for tlv in tlvs:
-            # Child Table TLV
-            if tlv.type is 16:
-                children = [
-                    tlv.value[i:i + 3] for i in range(0, tlv.length, 3)
-                ]
-                for child in children:
-                    json_child_info = {}
-                    rloc_high = bytearray.fromhex(json_node_info['rloc16'])[0]
-                    rloc_high |= child[0] & 0x01
-                    json_child_info['rloc16'] = '%02x%02x' % (rloc_high,
-                                                              child[1])
-                    json_child_info['timeout'] = '%u' % (
-                        child[0] >> 3)  # TODO: convert to seconds
-                    json_node_info['children'].append(json_child_info)
+        # Child Table TLV
+        value = ThreadTLV.get_value(tlvs, TLV.D_CHILD_TABLE)
+        if value:
+            children = [value[i:i + 3] for i in range(0, len(value), 3)]
+            for child in children:
+                json_child_info = {}
+                rloc_high = bytearray.fromhex(json_node_info['rloc16'])[0]
+                rloc_high |= child[0] & 0x01
+                json_child_info['rloc16'] = '%02x%02x' % (rloc_high, child[1])
+                json_child_info['timeout'] = '%u' % (
+                    child[0] >> 3)  # TODO: convert to seconds
+                json_node_info['children'].append(json_child_info)
 
         # Update other informations
-        if json_node_info['rloc16'] in leader_rloc16:
+        if leader_rloc16 and json_node_info['rloc16'] in leader_rloc16:
             json_node_info['roles'].append('leader')
         if json_node_info['rloc16'] in self.br_rloc16:
             json_node_info['roles'].append('border-router')
@@ -238,7 +228,7 @@ class DIAGS(Ktask):
                 # Remove old data
                 DIAGS_DB['nodes'].pop(index)
         # Set firstSeen
-        if not 'firstSeen' in json_node_info:
+        if 'firstSeen' not in json_node_info:
             logging.info('New node! "%s"', json_node_info['rloc16'])
             json_node_info['firstSeen'] = _epoch_ms()
         # Set new data
@@ -260,39 +250,83 @@ class DIAGS(Ktask):
     def _parse_active_dataset(self, payload):
         # No response to /c/ag
         if payload is None or b'':
-            db.set('bagent_tis', 0)
-            db.set('bagent_cm', 0)
+            db.set('dongle_secpol', '0')
         # Response present
         else:
-            # If the BR is not a REED and responds to /c/ag, TIS=2
-            if self.br_rloc16[-2] is '00':
-                db.set('bagent_tis', 2)
-            # Update other parameters
-            tlvs = ThreadTLV.sub_tlvs(payload)
-            for tlv in tlvs:
-                # Channel TLV
-                if tlv.type is 0:
-                    db.set('dongle_channel', int(tlv.value[2]))
-                # PAN ID TLV
-                if tlv.type is 1:
-                    db.set('dongle_panid',
-                           '0x' + ''.join('%02x' % byte for byte in tlv.value))
-                # Extended PAN ID TLV
-                if tlv.type is 2:
-                    db.set('dongle_xpanid',
-                           '0x' + ''.join('%02x' % byte for byte in tlv.value))
-                # Network Name TLV
-                if tlv.type is 3:
-                    db.set('dongle_netname',
-                           ''.join('%c' % byte for byte in tlv.value))
-                # Network Mesh-Local Prefix TLV
-                if tlv.type is 7:
-                    db.set('dongle_prefix',
-                           ''.join('%02x' % byte for byte in tlv.value))
-                # Active Timestamp TLV
-                if tlv.type is 14:
-                    db.set('bagent_at',
-                           ''.join('%02x' % byte for byte in tlv.value))
-                # Security Policy TLV
-                if tlv.type is 12:
-                    db.set('bagent_cm', (tlv.value[2] >> 2) & 0x01)
+            value = ThreadTLV.get_value(payload, TLV.C_CHANNEL)
+            if value:
+                db.set('dongle_channel', int(value[2]))
+            value = ThreadTLV.get_value(payload, TLV.C_PAN_ID)
+            if value:
+                db.set('dongle_panid',
+                       '0x' + ''.join('%02x' % byte for byte in value))
+            value = ThreadTLV.get_value(payload, TLV.C_EXTENDED_PAN_ID)
+            if value:
+                db.set('dongle_xpanid',
+                       '0x' + ''.join('%02x' % byte for byte in value))
+            value = ThreadTLV.get_value(payload, TLV.C_NETWORK_NAME)
+            if value:
+                db.set('dongle_netname',
+                       ''.join('%c' % byte for byte in value))
+            value = ThreadTLV.get_value(payload,
+                                        TLV.C_NETWORK_MESH_LOCAL_PREFIX)
+            if value:
+                prefix_bytes = bytes(value) + bytes(8)
+                prefix_addr = ipaddress.IPv6Address(prefix_bytes)
+                db.set('dongle_prefix', prefix_addr.compressed + '/64')
+            value = ThreadTLV.get_value(payload, TLV.C_ACTIVE_TIMESTAMP)
+            value = ThreadTLV.get_value(payload, TLV.C_SECURITY_POLICY)
+            if value:
+                db.set('dongle_secpol', value.hex())
+
+    def _parse_net_data(self, tlvs):
+        is_pbbr = False
+        value = ThreadTLV.get_value(tlvs, TLV.D_NETWORK_DATA)
+        if value:
+            for tlv in ThreadTLV.sub_tlvs(value):
+                type_ = tlv.type >> 1
+                if type_ is TLV.N_SERVICE:
+                    # Detect BBR Dataset encoding
+                    if (tlv.value[0] >> 7 and tlv.value[1] is 1
+                            and tlv.value[2] is 1):
+                        server_tlvs = ThreadTLV.sub_tlvs(tlv.value[3:])
+                        '''BBR is primary if there is only one Server TLV in the
+                        BBR Dataset and the RLOC16 is the same as ours'''
+                        if len(server_tlvs) == 1:
+                            node_rloc = ipaddress.IPv6Address(
+                                db.get('dongle_rloc')).packed
+                            if node_rloc[14:16] == server_tlvs[0].value[0:2]:
+                                is_pbbr = True
+                elif type_ is TLV.N_PREFIX:
+                    if db.get('prefix_dhcp') and not db.get('dhcp_aloc'):
+                        # Detect DHCPv6 Agent ALOC
+                        length = math.ceil(tlv.value[1]/8)
+                        byt_prefix = tlv.value[2:2+length] + bytes(length)
+                        int_prefix = int.from_bytes(byt_prefix, byteorder='big')
+                        str_prefix = ipaddress.IPv6Address(int_prefix).compressed
+                        str_prefix += '/%s' % tlv.value[1]
+                        if str_prefix == db.get('prefix'):
+                            # This is the prefix that we announced
+                            for subtlv in ThreadTLV.sub_tlvs(tlv.value[(length+2):]):
+                                # TODO: verify that there is a Border Router TLV
+                                # matching our RLOC16 and DHCP flag
+                                if subtlv.type >> 1 is TLV.N_6LOWPAN_ID:
+                                    cid = subtlv.value[0] & 0x0f
+                                    rloc = db.get('dongle_rloc')
+                                    aloc = list(ipaddress.IPv6Address(rloc).packed)
+                                    aloc[14] = 0xfc
+                                    aloc[15] = cid
+                                    aloc = ipaddress.IPv6Address(bytes(aloc)).compressed
+                                    db.set('dhcp_aloc', aloc)
+                                    # Listen to the DHCP ALOC which is going to be
+                                    # used by BR MTD children
+                                    netmap(aloc, rloc)
+        
+        if is_pbbr:
+            if 'primary' not in db.get('bbr_status'):
+                logging.info('Setting this BBR as Primary')
+            db.set('bbr_status', 'primary')
+        else:
+            if 'secondary' not in db.get('bbr_status'):
+                logging.info('Setting this BBR as Secondary')
+            db.set('bbr_status', 'secondary')

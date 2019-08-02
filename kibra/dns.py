@@ -15,12 +15,16 @@ class DNS(Ktask):
         Ktask.__init__(
             self,
             name='dns',
-            start_keys=['dongle_eid'],
+            start_keys=['dongle_mleid'],
             stop_keys=[],
             start_tasks=['network', 'serial', 'nat'],
             period=1)
 
     def kstart(self):
+        # Don't start if DHCP is not to be used
+        if not db.get('prefix_dhcp'):
+            return
+
         # Stop DNS daemon
         bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration
@@ -28,7 +32,7 @@ class DNS(Ktask):
         # Add new configuration
         with open(DNS_CONFIG, 'w') as file_:
             file_.write('\nserver:')
-            file_.write('\n    interface: %s' % db.get('dongle_eid'))
+            file_.write('\n    interface: %s' % db.get('dongle_mleid'))
             file_.write('\n    access-control: ::/0 allow')
             file_.write('\n    module-config: "dns64 validator iterator"')
             file_.write('\n    dns64-prefix: 64:ff9b::/96')
@@ -39,6 +43,11 @@ class DNS(Ktask):
         bash('service %s start' % DNS_DAEMON)
 
     def kstop(self):
+        # Don't stop if DHCP is not to be used
+        if not db.get('prefix_dhcp'):
+            return
+
+        #TODO: https://www.claudiokuenzler.com/blog/694/get-unbount-dns-lookups-resolution-working-ubuntu-16.04-xenial
         # Stop DNS daemon
         bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration for this dongle

@@ -1,25 +1,45 @@
+import hashlib
 import ipaddress
 import logging
+import struct
 from socket import AF_INET, AF_INET6
-from struct import pack, unpack
 from time import time
-from Cryptodome.Hash import SHA256
-from pyroute2 import IPRoute  # http://docs.pyroute2.org/iproute.html#api
+
+import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 
 import kibra.database as db
 import kibra.iptables as iptables
-from kibra.shell import bash
 from kibra.ktask import Ktask
+from kibra.shell import bash
 
 DHCLIENT6_LEASES_FILE = '/var/lib/dhcp/dhclient6.leases'
 BR_TABLE_NR = 200
-IP = IPRoute()
+IPR = pyroute2.IPRoute()
+
+IFF_UP = 0x1
+IFF_LOOPBACK = 0x8
+IFF_MULTICAST = 0x1000
 
 
-def _global_netconfig():
-    if not db.has_keys(['exterior_ifname']):
-        db.set('exterior_ifname', _get_ext_ifname())
-        logging.info('External interface is %s.', db.get('exterior_ifname'))
+def get_prefix_based_mcast(prefix, groupid):
+    '''RFC 3306'''
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    maddr_bytes = bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack(
+        '>I', groupid)
+    return ipaddress.IPv6Address(maddr_bytes).compressed
+
+
+def get_rloc_from_short(prefix, rloc16):
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    rloc_bytes = prefix_bytes[0:8] + bytes.fromhex('000000fffe00' + rloc16)
+    return ipaddress.IPv6Address(rloc_bytes).compressed
+
+
+def global_netconfig():
+    set_ext_iface()
+    logging.info('External interface is %s.', db.get('exterior_ifname'))
     if not db.has_keys(['prefix']):
         logging.info('Trying to obtain a prefix via Prefix Delegation...')
         prefix = _get_prefix(db.get('exterior_ifname'))
@@ -29,14 +49,43 @@ def _global_netconfig():
             logging.info('Generated the ULA prefix %s.' % prefix)
         db.set('prefix', prefix)
 
+    # Find exterior interface addresses
+    # Global IPv4 addresses
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=0)
+    if ipv4_addrs:
+        logging.info('Using %s as exterior IPv4 address.', ipv4_addrs[0])
+        db.set('exterior_ipv4', ipv4_addrs[0])
+
+    # Link-local IPv4 addresses
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=253)
+    if ipv4_addrs:
+        logging.info('Using %s as exterior IPv4 link-local address.',
+                     ipv4_addrs[0])
+        db.set('exterior_ipv4_ll', ipv4_addrs[0])
+
+    # Global IPv6 addresses
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=0)
+    if ipv6_addrs:
+        logging.info('Using %s as exterior IPv6 address.', ipv6_addrs[0])
+        db.set('exterior_ipv6', ipv6_addrs[0])
+
+    # Link-local IPv6 addresses
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=253)
+    if ipv6_addrs:
+        logging.info('Using %s as exterior link-local IPv6 address.',
+                     ipv6_addrs[0])
+        db.set('exterior_ipv6_ll', ipv6_addrs[0])
+
 
 def _get_ula():
     '''Generate a GUA as RFC4193'''
     # https://tools.ietf.org/html/rfc4193#section-3.2.2
-    ntp_time = str(unpack('Q', pack('d', time()))[0])  # Time in hexadecimal
-    eui64 = db.get('dongle_serial').split('+')[-1]  # EUI64
-    sha = SHA256.new((ntp_time + eui64).encode()).hexdigest().zfill(
-        40)  # SHA1 of Time + EUI64
+    # Time in hexadecimal
+    ntp_time = str(struct.unpack('Q', struct.pack('d', time()))[0])
+    eui64 = get_eui64(db.get('exterior_ifnumber')).replace(':', '')
+    sha = hashlib.sha256()
+    sha.update((ntp_time + eui64).encode())  # SHA1 of Time + EUI64
+    sha = sha.hexdigest().zfill(40)
     # fd + last 40 bits of SHA1
     ula = ipaddress.IPv6Address(
         int('fd' + sha[-10:] + '00000000000000000000', 16))
@@ -44,67 +93,75 @@ def _get_ula():
 
 
 def _get_prefix(exterior_ifname):
-    #TODO: Parse the leases file properly to make sure it is valid
+    # TODO: Parse the leases file properly to make sure it is valid
     prefix = db.find_in_file(DHCLIENT6_LEASES_FILE, 'iaprefix ', ' {')
     if prefix:
         logging.info('Obtained global prefix %s', prefix)
         return prefix
 
 
-def get_addr(ifname, family):
-    '''Get and address for the interface'''
-    # Find configured address
-    idx = IP.link_lookup(ifname=ifname)[0]
-    raw_addrs = IP.get_addr(family=family, scope=0, index=idx)
-    if raw_addrs:
-        return raw_addrs[0].get_attr('IFA_ADDRESS')
-    '''
-    # No configured address found, try DHCP
-    if family == AF_INET:
-        logging.info('No IPv4 addresses found, trying to obtain one via DHCP.')
-        leases_file = '%sleases-ip4-%s' % (db.CFG_PATH, ifname)
-        bash('dhclient -4 -lf %s %s 2> /dev/null' % (leases_file, ifname))
-    if family == AF_INET6:
-        logging.info('No IPv6 addresses found, trying to obtain one via DHCP.')
-        leases_file = '%sleases-ip6-%s' % (db.CFG_PATH, ifname)
-        bash('dhclient -6 -lf %s %s 2> /dev/null' % (leases_file, ifname))
-    raw_addrs = IP.get_addr(family=family, scope=0, index=idx)
-    if raw_addrs:
-        addr = raw_addrs[0].get_attr('IFA_ADDRESS')
-        return addr
-    '''
+def get_eui48(ifnumber):
+    '''Get EUI48 address for the interface'''
+    return IPR.link('get', index=ifnumber)[0].get_attr('IFLA_ADDRESS')
 
 
-def _get_ext_ifname():
-    '''Return the name of the interface with the default IPv4 route'''
-    def_routes = IP.get_default_routes(AF_INET)
-    if not def_routes:
-        raise Exception('No external interfaces found.')
-    index = def_routes[0].get_attr('RTA_OIF')
-    return IP.get_links(index)[0].get_attr('IFLA_IFNAME')
-    # Old:
-    #Return the name of the first active interface found
-    #for link in IP.get_links():
-    #    if 'UP' in link.get_attr('IFLA_OPERSTATE'):
-    #        return link.get_attr('IFLA_IFNAME')
+def get_eui64(ifnumber):
+    eui48 = get_eui48(ifnumber)
+    octets = eui48.split(':')
+    return ':'.join(octets[0:3] + ['ff', 'fe'] + octets[3:6])
+
+
+def get_addrs(ifname, family, scope=None):
+    '''Get an address for the interface'''
+    # Find configured addresses
+    idx = IPR.link_lookup(ifname=ifname)[0]
+    addrs = []
+    try:
+        for addr in IPR.get_addr(index=idx, family=family, scope=scope):
+            addrs.append(addr.get_attr('IFA_ADDRESS'))
+    except:
+        logging.warning('Problem retrieving device addresses.')
+    return addrs
+
+
+def set_ext_iface():
+    '''Select the right external interface'''
+
+    if not db.get('exterior_ifname'):
+        links = IPR.get_links()
+        for link in links:
+            # Don't choose the loopback interface
+            if link['flags'] & IFF_LOOPBACK:
+                continue
+            # Must be up
+            if not link['flags'] & IFF_UP:
+                continue
+            # Must have multicast enabled
+            if not link['flags'] & IFF_MULTICAST:
+                continue
+            # Don't choose the Kirale's Thread device
+            if link.get_attr('IFLA_ADDRESS').startswith('84:04:d2'):
+                continue
+            # First interface matching all criteria is selected
+            db.set('exterior_ifname', link.get_attr('IFLA_IFNAME'))
+            break
+
+    # No appropiate interface was found
+    if not db.get('exterior_ifname'):
+        raise Exception('No exterior interface available.')
+
+    # Set exterior index
+    idx = IPR.link_lookup(ifname=db.get('exterior_ifname'))[0]
+    db.set('exterior_ifnumber', idx)
+
+    # Set exterior MAC
+    db.set('exterior_mac', IPR.get_links(idx)[0].get_attr('IFLA_ADDRESS'))
 
 
 def dongle_conf():
     '''Configure several network parameters'''
-    # Find exterior interface and prefix
-    _global_netconfig()
-    # Detect exterior interface addresses
-    ipv4 = get_addr(db.get('exterior_ifname'), AF_INET)
-    if ipv4 != None:
-        logging.info('Using %s as exterior IPv4 address.', ipv4)
-        db.set('exterior_ipv4', ipv4)
-    # ipv6 = get_addr(db.get('exterior_ifname'), AF_INET6)
-    ipv6 = None
-    if ipv6 != None:
-        logging.info('Using %s as exterior IPv6 address.', ipv6)
-        db.set('exterior_ipv6', ipv6)
-
-    # By Kirale convention, interior MAC address is obtained from the dongle serial
+    # By Kirale convention, interior MAC address is obtained from the dongle
+    # serial
     serial = db.get('dongle_serial').split('+')[-1]
     interior_mac = ':'.join([
         serial[0:2], serial[2:4], serial[4:6], serial[10:12], serial[12:14],
@@ -116,39 +173,20 @@ def dongle_conf():
     dongle_mac[0] |= 0x02
     db.set('dongle_mac', ':'.join(['%02x' % byte for byte in dongle_mac]))
     # Find the device with the configured MAC address
-    links = IP.get_links(IFLA_ADDRESS=db.get('interior_mac').lower())
+    links = IPR.get_links(IFLA_ADDRESS=db.get('interior_mac').lower())
     if links:
         db.set('interior_ifname', links[0].get_attr('IFLA_IFNAME'))
         db.set('interior_ifnumber', links[0]['index'])
     else:
-        raise Exception(
-            'Error: Device not found with MAC ' + db.get('interior_mac'))
+        raise Exception('Error: Device not found with MAC ' +
+                        db.get('interior_mac'))
 
     # Use last 32 bits of interior MAC as bridging mark
     db.set('bridging_mark',
            int(db.get('interior_mac').replace(':', '')[-8:], 16))
     db.set('bridging_table', db.get('interior_mac'))
-    db.set('bagent_port', 49191)
-    db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
-
-    # Load or generate the Pool4 prefix
-    if not db.has_keys(['pool4']):
-        # Default Kirale NAT IPv4 pool, with room for 64k nodes (>32*512).
-        # Last byte of the interior MAC is used to compose the IPv4 network address
-        db.set('pool4', '10.' +
-               str(int(db.get('interior_mac').split(':')[-1], 16)) + '.0.0/16')
-    elif int(db.get('pool4').split('/')[1]) % 8 != 0:
-        raise Exception('Error: Pool4 prefix length must be a 8 multiple.')
-
-    # Compose the DHCPv6 pool: global prefix + pool4
-    if db.has_keys(['prefix']):
-        net4 = ipaddress.ip_network(db.get('pool4'))
-        net6 = ipaddress.ip_network(db.get('prefix'))
-        shift = 2**(96 - net6.prefixlen)
-        dhcp = ipaddress.ip_address(int(net6[0]) + shift * int(net4[0]))
-        dhcp_pool = ipaddress.ip_network(
-            str(dhcp) + '/' + str(net4.prefixlen + net6.prefixlen))
-        db.set('dhcp_pool', str(dhcp_pool))
+    # This is only useful when more than one interior interface is used
+    #db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
 
 
 def _get_rt_tables():
@@ -168,47 +206,52 @@ def _rt_add_table(name, number):
 
 def _ifup():
     # Make sure forwarding is enabled
-    bash('sysctl -w net.ipv4.conf.all.forwarding=1')
-    bash('sysctl -w net.ipv6.conf.all.forwarding=1')
+    bash('echo 1 > /proc/sys/net/ipv4/conf/all/forwarding')
+    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
     logging.info('Forwarding has been enabled.')
 
     # Disable duplicate address detection for the interior interface
-    bash('sysctl -w net.ipv6.conf.%s.accept_dad=0' % db.get('interior_ifname'))
+    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' %
+         db.get('interior_ifname'))
     logging.info('DAD has been disabled for %s.', db.get('interior_ifname'))
+
+    # Enable a bigger number of multicast groups
+    # https://www.kernel.org/doc/Documentation/sysctl/net.txt
+    bash('echo 65536 > /proc/sys/net/core/optmem_max')
 
     # Bring interior interface up
     idx = db.get('interior_ifnumber')
     # First bring it down to remove old invalid addresses
-    IP.link('set', index=idx, state='down')
-    IP.link('set', index=idx, state='up', txqlen=5000)
+    IPR.link('set', index=idx, state='down')
+    IPR.link('set', index=idx, state='up', txqlen=5000)
 
     # Add inside IPv6 addresses
     logging.info('Configuring interior interface %s with address %s.',
                  db.get('interior_ifname'), db.get('dongle_rloc'))
-    IP.addr('add', index=idx, address=db.get('dongle_rloc'), prefixlen=64)
+    IPR.addr('add', index=idx, address=db.get('dongle_rloc'), prefixlen=64)
     logging.info('Configuring interior interface %s with address %s.',
-                 db.get('interior_ifname'), db.get('dongle_eid'))
-    IP.addr('add', index=idx, address=db.get('dongle_eid'), prefixlen=64)
+                 db.get('interior_ifname'), db.get('dongle_mleid'))
+    IPR.addr('add', index=idx, address=db.get('dongle_mleid'), prefixlen=64)
 
     # Add dongle neighbour
-    IP.neigh(
+    IPR.neigh(
         'replace',
         family=AF_INET6,
         dst=db.get('dongle_ll'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
-    IP.neigh(
+    IPR.neigh(
         'replace',
         family=AF_INET6,
         dst=db.get('dongle_rloc'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
-    IP.neigh(
+    IPR.neigh(
         'replace',
         family=AF_INET6,
-        dst=db.get('dongle_eid'),
+        dst=db.get('dongle_mleid'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
@@ -219,15 +262,15 @@ def _ifup():
         _rt_add_table(db.get('bridging_table'), BR_TABLE_NR)
 
     # Add default route to custom table
-    IP.route(
+    IPR.route(
         'replace', family=AF_INET6, dst='default', table=BR_TABLE_NR, oif=idx)
 
-    rules = IP.get_rules(family=AF_INET6)
+    rules = IPR.get_rules(family=AF_INET6)
 
     # Make marked packets use the custom table
     # TODO: different priorities for different dongles
     if str(db.get('bridging_mark')) not in str(rules):
-        IP.rule(
+        IPR.rule(
             'add',
             family=AF_INET6,
             table=BR_TABLE_NR,
@@ -237,38 +280,38 @@ def _ifup():
     # Set priority of local table lower than custom table's
     for rule in rules:
         if rule.get('table') == rt_tables.get('local'):
-            IP.rule(
+            IPR.rule(
                 'delete',
                 family=AF_INET6,
                 table=rule.get('table'),
                 priority=rule.get_attr('FRA_PRIORITY') or 0)
-    IP.rule(
+    IPR.rule(
         'add', family=AF_INET6, table=rt_tables.get('local'), priority=1000)
-
     '''
-    # Rate limit traffic to the interface, 125 kbps (maximum data rate in the air)
+    # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
+    # air)
     logging.info('Traffic rate limit established to %s on interface %s.',
                  '125 kbps', db.get('interior_ifname'))
     bash('tc qdisc add dev ' + db.get('interior_ifname') +
          ' root handle 1: cbq avpkt 1000 bandwidth 12mbit')
-    bash(
-        'tc class add dev ' + db.get('interior_ifname') +
-        ' parent 1: classid 1:1 cbq rate 125kbit allot 1500 prio 5 bounded isolated'
-    )
+    bash('tc class add dev ' + db.get('interior_ifname') +
+         ' parent 1: classid 1:1 cbq rate 125kbit ' +
+         'allot 1500 prio 5 bounded isolated')
     bash('tc filter add dev ' + db.get('interior_ifname') +
          ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1')
     '''
 
+
 def _ifdown():
     # Remove custom routing table
-    db.del_from_file('/etc/iproute2/rt_tables', '\n%s\t%s\n' %
-                     (BR_TABLE_NR, db.get('bridging_table')), '')
+    db.del_from_file('/etc/iproute2/rt_tables',
+                     '\n%s\t%s\n' % (BR_TABLE_NR, db.get('bridging_table')),
+                     '')
 
     # Don't continue if the interface is already down
-    idx = IP.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
+    idx = IPR.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
     if not idx:
         return
-
     '''
     # Delete traffic limits
     bash('tc qdisc del dev ' + db.get('interior_ifname') +
@@ -276,7 +319,7 @@ def _ifdown():
     '''
 
     # Delete custom rule
-    IP.rule(
+    IPR.rule(
         'delete',
         family=AF_INET6,
         table=BR_TABLE_NR,
@@ -285,15 +328,31 @@ def _ifdown():
 
     # Bring interior interface down
     logging.info('Bringing %s interface down.', db.get('interior_ifname'))
-    IP.link('set', index=idx[0], state='down')
+    IPR.link('set', index=db.get('interior_ifnumber'), state='down')
 
 
 def dongle_route_enable(prefix):
-    bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+    try:
+        IPR.route(
+            'replace',
+            family=AF_INET6,
+            dst=prefix,
+            oif=db.get('interior_ifnumber'))
+        #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+    except:
+        logging.warning('Route for %s could not be enabled' % prefix)
 
 
 def dongle_route_disable(prefix):
-    bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+    try:
+        IPR.route(
+            'del',
+            family=AF_INET6,
+            dst=prefix,
+            oif=db.get('interior_ifnumber'))
+        #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+    except:
+        logging.warning('Route for %s could not be disabled' % prefix)
 
 
 class NETWORK(Ktask):
@@ -306,7 +365,7 @@ class NETWORK(Ktask):
                 'dongle_rloc', 'interior_mac'
             ],
             start_tasks=['serial'],  # To obtain the latest dongle_rloc
-            stop_tasks=['diags'],
+            stop_tasks=['diags', 'coapserver'],
             period=2)
 
     def kstart(self):
@@ -319,9 +378,14 @@ class NETWORK(Ktask):
         iptables.handle_ipv6('D')
         _ifdown()
 
-    def periodic(self):
-        if not IP.link_lookup(
-                ifname=db.get('interior_ifname'), operstate='UP'):
+    async def periodic(self):
+        try:
+            interior_link_up = IPR.link_lookup(
+                ifname=db.get('interior_ifname'), operstate='UP')
+        except:
+            interior_link_up = False
+        if not interior_link_up:
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
+        # TODO: detect changes in addresses
