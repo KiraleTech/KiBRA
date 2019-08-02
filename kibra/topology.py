@@ -71,7 +71,7 @@ def _join_network(dev, role, oobcom):
     if dev.ksh_cmd('show status', True)[0] != 'none':
         dev.ksh_cmd('debug level none', True)
         dev.ksh_cmd('clear')
-        dev.wait_for('status', ['none'])
+        dev.wait_for('status', ['none'], 5)
     dev.ksh_cmd('config outband')
     #dev.ksh_cmd('config thver 3')
     for key, param in oobcom.items():
@@ -82,14 +82,14 @@ def _join_network(dev, role, oobcom):
         dev.ksh_cmd('config sjitter 1')
     dev.ksh_cmd('config role %s' % role)
     dev.ksh_cmd('ifup')
-    dev.wait_for('status', ['joined'])
-    dev.wait_for('role', [role, 'leader'])
+    dev.wait_for('status', ['joined'], 60)
+    dev.wait_for('role', [role, 'leader'], 120)
 
 
 def _stop_topology(dev):
     logging.info('Removing %s from the network' % dev.name)
     dev.ksh_cmd('clear')
-    dev.wait_for('status', ['none'])
+    dev.wait_for('status', ['none'], 5)
 
 
 def form_topology():

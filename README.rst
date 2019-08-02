@@ -232,6 +232,7 @@ You may want to configure keyboard and time zone:
 ::
 
  dpkg-reconfigure tzdata
+ dpkg-reconfigure ntp
  dpkg-reconfigure keyboard-configuration
  setupcon
 
