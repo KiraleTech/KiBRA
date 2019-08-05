@@ -2,12 +2,14 @@ import logging
 import os
 import importlib_resources
 import struct
+import sys
 import time
 
 import kibra
 import kibra.database as db
 from kibra.ktask import Ktask
 from kibra.network import dongle_conf, dongle_route_enable
+from kibra.shell import bash
 from kibra.thread import DEFS, TLV
 from kibra.tlv import ThreadTLV
 from kitools import kidfu, kifwu, kiserial
@@ -37,20 +39,15 @@ def _find_device(snum):
     if kirale_devs:
         logging.info('KiNOS device was found on %s!', kirale_devs[0].port)
         return kirale_devs[0].port
-    logging.warn('No KiNOS devices found.')
+    logging.error('No KiNOS devices found.')
+    sys.exit()
 
 
-def ncp_fw_update(current_fw):
+def ncp_fw_update():
     '''
     Compare the NCP firmware with the one available in the 'ncp_fiwmare' folder 
     and update if needed
     '''
-
-    # No need to continue if NCP fw version is up to date
-    if kibra.__kinosver__ in current_fw:
-        logging.info('NCP firmware is up to date.')
-        return
-    logging.info('NCP needs a firmware update.')
 
     # Find the DFU file that matches the required fw version
     dfu_file = None
@@ -63,7 +60,7 @@ def ncp_fw_update(current_fw):
             break
     if not dfu_file:
         logging.error('Required NCP firmware not present.')
-        return
+        sys.exit()
 
     # Flash the NCP and re-enable it
     with importlib_resources.path(NCP_FW_FOLDER, dfu_file) as dfu_path:
@@ -71,15 +68,15 @@ def ncp_fw_update(current_fw):
         try:
             dfu_file = kidfu.DfuFile(str(dfu_path))
             kifwu.dfu_find_and_flash(dfu_file, unattended=True)
+            # TODO: Remove this when KiTools is fixed for a proper USB re-enumeration
+            # Reset USB device in KTBRN1
+            bash('sh -c "echo 0 > /sys/bus/usb/devices/6-1/authorized"')
+            bash('sh -c "echo 1 > /sys/bus/usb/devices/6-1/authorized"')
         except Exception as exc:
             logging.error('Problem updating NCP firmware: %s' % exc)
-            return
-        # Allow for new firmware to be applied
-        time.sleep(10)
-    logging.info('NCP updated successfully.')
+            sys.exit()
 
-    # Find the NCP again
-    enable_ncp()
+    logging.info('NCP updated successfully.')
 
 
 def enable_ncp():
@@ -100,18 +97,24 @@ def enable_ncp():
     serial = send_cmd('show snum')[0]
     db.set('dongle_serial', serial)
 
-    # Enable ECM if not enabled
-    if 'off' in send_cmd('show hwconfig')[3]:
-        logging.info('Enabling CDC Ethernet and reseting device.')
-        send_cmd('config hwmode 4')
-        send_cmd('reset')
-        time.sleep(0.5)
-        del SERIAL_DEV
-        enable_ncp()
-
     # Update the NCP firmware if needed
-    ncp_fw_update(send_cmd('show swver')[-1])
+    if kibra.__kinosver__ not in send_cmd('show swver')[-1]:
+        logging.info('NCP needs a firmware update.')
+        ncp_fw_update()
+        enable_ncp()
+    # No need to continue if NCP fw version is up to date
+    else:
+        logging.info('NCP firmware is up to date.')
 
+        # Enable ECM if not enabled
+        if 'off' in send_cmd('show hwconfig')[3]:
+            logging.info('Enabling CDC Ethernet and reseting device.')
+            send_cmd('config hwmode 4')
+            send_cmd('reset')
+            time.sleep(3)
+            del SERIAL_DEV
+            enable_ncp()
+        
 
 def _dongle_apply_config():
     # Config network parameters
