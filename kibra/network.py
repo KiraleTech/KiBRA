@@ -47,6 +47,8 @@ def global_netconfig():
             logging.info('It was not possible to obtain a global prefix.')
             prefix = _get_ula()
             logging.info('Generated the ULA prefix %s.' % prefix)
+        # Obtain /64 subprefix
+        prefix = '%s/64' % prefix.split('/')[0]
         db.set('prefix', prefix)
 
     # Find exterior interface addresses
