@@ -408,7 +408,8 @@ class SERIAL(Ktask):
                 dhcp=dhcp,
                 dp=dp)
             
-            bbr_dataset_update()
+            if dp:
+                bbr_dataset_update()
 
             # Mark prefix as active
             db.set('prefix_active', 1)
