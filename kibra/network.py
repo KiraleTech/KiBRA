@@ -2,8 +2,8 @@ import hashlib
 import ipaddress
 import logging
 import struct
-from socket import AF_INET, AF_INET6
-from time import time
+import socket
+import time
 
 import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 
@@ -19,6 +19,15 @@ IPR = pyroute2.IPRoute()
 IFF_UP = 0x1
 IFF_LOOPBACK = 0x8
 IFF_MULTICAST = 0x1000
+
+
+def internet_access(host='1.1.1.1', port=53, timeout=0.7):
+  try:
+    socket.setdefaulttimeout(timeout)
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+    return True
+  except socket.error:
+    return False
 
 
 def get_prefix_based_mcast(prefix, groupid):
@@ -53,26 +62,26 @@ def global_netconfig():
 
     # Find exterior interface addresses
     # Global IPv4 addresses
-    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=0)
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET, scope=0)
     if ipv4_addrs:
         logging.info('Using %s as exterior IPv4 address.', ipv4_addrs[0])
         db.set('exterior_ipv4', ipv4_addrs[0])
 
     # Link-local IPv4 addresses
-    ipv4_addrs = get_addrs(db.get('exterior_ifname'), AF_INET, scope=253)
+    ipv4_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET, scope=253)
     if ipv4_addrs:
         logging.info('Using %s as exterior IPv4 link-local address.',
                      ipv4_addrs[0])
         db.set('exterior_ipv4_ll', ipv4_addrs[0])
 
     # Global IPv6 addresses
-    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=0)
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET6, scope=0)
     if ipv6_addrs:
         logging.info('Using %s as exterior IPv6 address.', ipv6_addrs[0])
         db.set('exterior_ipv6', ipv6_addrs[0])
 
     # Link-local IPv6 addresses
-    ipv6_addrs = get_addrs(db.get('exterior_ifname'), AF_INET6, scope=253)
+    ipv6_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET6, scope=253)
     if ipv6_addrs:
         logging.info('Using %s as exterior link-local IPv6 address.',
                      ipv6_addrs[0])
@@ -83,7 +92,7 @@ def _get_ula():
     '''Generate a GUA as RFC4193'''
     # https://tools.ietf.org/html/rfc4193#section-3.2.2
     # Time in hexadecimal
-    ntp_time = str(struct.unpack('Q', struct.pack('d', time()))[0])
+    ntp_time = str(struct.unpack('Q', struct.pack('d', time.time()))[0])
     eui64 = get_eui64(db.get('exterior_ifnumber')).replace(':', '')
     sha = hashlib.sha256()
     sha.update((ntp_time + eui64).encode())  # SHA1 of Time + EUI64
@@ -238,21 +247,21 @@ def _ifup():
     # Add dongle neighbour
     IPR.neigh(
         'replace',
-        family=AF_INET6,
+        family=socket.AF_INET6,
         dst=db.get('dongle_ll'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
     IPR.neigh(
         'replace',
-        family=AF_INET6,
+        family=socket.AF_INET6,
         dst=db.get('dongle_rloc'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
         nud='permanent')
     IPR.neigh(
         'replace',
-        family=AF_INET6,
+        family=socket.AF_INET6,
         dst=db.get('dongle_mleid'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
@@ -265,16 +274,16 @@ def _ifup():
 
     # Add default route to custom table
     IPR.route(
-        'replace', family=AF_INET6, dst='default', table=BR_TABLE_NR, oif=idx)
+        'replace', family=socket.AF_INET6, dst='default', table=BR_TABLE_NR, oif=idx)
 
-    rules = IPR.get_rules(family=AF_INET6)
+    rules = IPR.get_rules(family=socket.AF_INET6)
 
     # Make marked packets use the custom table
     # TODO: different priorities for different dongles
     if str(db.get('bridging_mark')) not in str(rules):
         IPR.rule(
             'add',
-            family=AF_INET6,
+            family=socket.AF_INET6,
             table=BR_TABLE_NR,
             priority=100,
             fwmark=int(db.get('bridging_mark')))
@@ -284,11 +293,11 @@ def _ifup():
         if rule.get('table') == rt_tables.get('local'):
             IPR.rule(
                 'delete',
-                family=AF_INET6,
+                family=socket.AF_INET6,
                 table=rule.get('table'),
                 priority=rule.get_attr('FRA_PRIORITY') or 0)
     IPR.rule(
-        'add', family=AF_INET6, table=rt_tables.get('local'), priority=1000)
+        'add', family=socket.AF_INET6, table=rt_tables.get('local'), priority=1000)
     '''
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
     # air)
@@ -323,7 +332,7 @@ def _ifdown():
     # Delete custom rule
     IPR.rule(
         'delete',
-        family=AF_INET6,
+        family=socket.AF_INET6,
         table=BR_TABLE_NR,
         priority=100,
         fwmark=int(db.get('bridging_mark')))
@@ -337,7 +346,7 @@ def dongle_route_enable(prefix):
     try:
         IPR.route(
             'replace',
-            family=AF_INET6,
+            family=socket.AF_INET6,
             dst=prefix,
             oif=db.get('interior_ifnumber'))
         #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
@@ -349,7 +358,7 @@ def dongle_route_disable(prefix):
     try:
         IPR.route(
             'del',
-            family=AF_INET6,
+            family=socket.AF_INET6,
             dst=prefix,
             oif=db.get('interior_ifnumber'))
         #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))

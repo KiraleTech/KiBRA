@@ -56,6 +56,7 @@ class DIAGS(Ktask):
         self.last_diags = []
         self.last_time = 0
 
+
     def kstart(self):
         ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
         self.br_permanent_addr = '%s%%%s' % (ll_addr,
@@ -67,17 +68,16 @@ class DIAGS(Ktask):
         db.delete('dongle_netname')
         db.set('bbr_status', 'off')
 
+
     def kstop(self):
         self.petitioner.stop()
+
 
     async def periodic(self):
         # Check internet connection
         if not kibra.__harness__:
-            ping = int(
-                str(
-                    bash('ping -c 1 -s 0 -I %s -q 8.8.8.8 > /dev/null ; echo $?' %
-                        db.get('exterior_ifname'))))
-            self.br_internet_access = 'online' if ping is 0 else 'offline'
+            access = NETWORK.internet_access()
+            self.br_internet_access = 'online' if access else 'offline'
         # Diags
         response = await self.petitioner.con_request(
             self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
