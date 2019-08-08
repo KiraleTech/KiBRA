@@ -25,11 +25,11 @@ Features
 - NTP client and server, advertised to the Thread network in the DHCP options.
 - Stateful NAT64 (`Jool <https://www.jool.mx/>`_) autoconfguration.
 - DNS64 server (`Unbound <http://www.unbound.net/>`_).
-- mDNS (`Python Zeroconf <https://github.com/jstasiak/python-zeroconf>`_) 
+- mDNS (`Avahi <https://www.avahi.org/>`_) 
   advertisement of MeshCoP Border Agent service in the exterior network, with 
   support for external commissioner.
 - Thread network real-time supervision with Thread Management Framework using a
-  CoAP client (`aiocoap <https://www.avahi.org/>`_).
+  CoAP client (`aiocoap <https://github.com/chrysn/aiocoap/>`_).
 - Web based dynamic network visualization.
 - Includes a tool to easyly form a big test Thread network with other attached
   KiNOS devices.
@@ -164,7 +164,7 @@ The user can also force some other configuration options:
    "dongle_panid": "0xc04b",
    "dongle_role": "leader",
    "dongle_serial": "KTWM102-11+201801+8404D2000000045C"
-   "exterior_ifname": "eth00",
+   "exterior_ifname": "eth0",
    "prefix": "2017:0:0:5::/64"
  }
 
@@ -222,8 +222,11 @@ KTDG102 USB Dongles, and therefore, remove them from the network.
 Armbian Image
 ====================================
 
-It is possible to access to use a serial terminal throught the USB port to 
-access to the system shell. The default credentials are:
+A prebuilt `Armbian image <https://www.kirale.com/products/ktbrn1/#resources>`_
+for the KTBRN1 is available for download from the Kirale's website.
+
+Once flashed to a Micro SD it is possible to use a serial terminal throught the
+USB port to access to the system shell. The default credentials are:
 
 :User: ``root``
 :Password: ``kirale123``
