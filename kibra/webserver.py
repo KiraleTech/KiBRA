@@ -76,91 +76,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
             req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
 
             # Different actions
-            if kibra.__harness__:
-                if self.path.startswith('/api'):
-                    for key in req.keys():
-                        if not key in db.modifiable_keys():
-                            self.send_response(http.HTTPStatus.BAD_REQUEST)
-                            return
-                    # Apply incoming changes
-                    modif_keys = set()
-                    for key, value in req.items():
-                        if str(db.get(key)) != value[0]:
-                            db.set(key, value[0])
-                            modif_keys.add(key)
-                    # Special actions
-                    if not set(['mlr_timeout', 'rereg_delay'
-                                ]).isdisjoint(modif_keys):
-                        bbr_dataset_update()
-                    data = 'OK'
-                elif self.path.startswith('/ksh'):
-                    cmd = req.get('c', None)
-                    if cmd:
-                        data = '\n'.join(send_cmd(cmd[0]))
-                    else:
-                        return
-                elif self.path.startswith('/ping'):
-                    dst = req.get('dst', ['0100::'])[0]
-                    size = req.get('sz', ['0'])[0]
-                    hl = req.get('hl', ['255'])[0]
-                    iface = db.get('exterior_ifname')
-                    port = req.get('port', [''])[0]
-                    if port:
-                        # UDP
-                        cmd = 'nping -6 --udp'
-                        cmd += ' --source-port %s --dest-port %s' % (port, port)
-                        cmd += ' --no-capture --count 1'
-                        cmd += ' --interface %s' % iface
-                        cmd += ' --dest-ip %s' % dst
-                        cmd += ' --source-mac %s' % db.get('exterior_mac')
-                        # TODO: https://en.wikipedia.org/wiki/Multicast_address#Ethernet
-                        cmd += ' --dest-mac ff:ff:ff:ff:ff:ff'
-                        cmd += ' --hop-limit %s' % hl
-                        # TODO: use DUA as source
-                        cmd += ' --source-ip %s' % db.get('exterior_ipv6_ll')
-                        cmd += ' --data-length %s' % size
-                    else:
-                        # ICMP
-                        cmd = 'ping -6 -c1 -W2'
-                        cmd += ' -s%s -t%s -I%s %s' % (size, hl, iface, dst)
-                    try:
-                        data = bash(cmd)
-                    except Exception as e:
-                        logging.error(e)
-                        data = 'ping error'
-                elif self.path.startswith('/radvd'):
-                    off = req.get('off')
-                    backhaul = req.get('bh')
-                    domain = req.get('dm')
-                    if off:
-                        bash('service radvd stop')
-                    elif backhaul and domain:
-                        if not db.get('exterior_ifname'):
-                            set_ext_iface()
-                        with open('/etc/radvd.conf', 'w') as file_:
-                            file_.write(
-                                'interface %s {\n' % db.get('exterior_ifname'))
-                            file_.write('  AdvSendAdvert on;\n')
-                            file_.write('  prefix %s { AdvAutonomous on; };\n' %
-                                        backhaul[0])
-                            file_.write('  prefix %s { AdvAutonomous off; };\n' %
-                                        domain[0])
-                            file_.write('};\n')
-                        bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
-                        bash('service radvd restart')
-                    else:
-                        return
-                    data = 'OK'
-                elif self.path.startswith('/mdnsqry'):
-                    bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
-                    data = 'OK'
-                elif self.path.startswith('/duastatus'):
-                    db.set('dua_next_status', req.get('nxt')[0])
-                    data = 'OK'
-                elif self.path.startswith('/coap'):
-                    db.set('coap_req', req)
-                    data = 'OK'
-            elif self.path == '/logs':
+            if self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
                 with open(db.LOG_FILE, 'r') as file_:
                     data = file_.read()
@@ -183,6 +99,89 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     mime_type = 'text/css'
                 with open(file_path, 'rb' if binary else 'r') as file_:
                     data = file_.read()
+            elif kibra.__harness__ and self.path.startswith('/api'):
+                for key in req.keys():
+                    if not key in db.modifiable_keys():
+                        self.send_response(http.HTTPStatus.BAD_REQUEST)
+                        return
+                # Apply incoming changes
+                modif_keys = set()
+                for key, value in req.items():
+                    if str(db.get(key)) != value[0]:
+                        db.set(key, value[0])
+                        modif_keys.add(key)
+                # Special actions
+                if not set(['mlr_timeout', 'rereg_delay'
+                            ]).isdisjoint(modif_keys):
+                    bbr_dataset_update()
+                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/ksh'):
+                cmd = req.get('c', None)
+                if cmd:
+                    data = '\n'.join(send_cmd(cmd[0]))
+                else:
+                    return
+            elif kibra.__harness__ and self.path.startswith('/ping'):
+                dst = req.get('dst', ['0100::'])[0]
+                size = req.get('sz', ['0'])[0]
+                hl = req.get('hl', ['255'])[0]
+                iface = db.get('exterior_ifname')
+                port = req.get('port', [''])[0]
+                if port:
+                    # UDP
+                    cmd = 'nping -6 --udp'
+                    cmd += ' --source-port %s --dest-port %s' % (port, port)
+                    cmd += ' --no-capture --count 1'
+                    cmd += ' --interface %s' % iface
+                    cmd += ' --dest-ip %s' % dst
+                    cmd += ' --source-mac %s' % db.get('exterior_mac')
+                    # TODO: https://en.wikipedia.org/wiki/Multicast_address#Ethernet
+                    cmd += ' --dest-mac ff:ff:ff:ff:ff:ff'
+                    cmd += ' --hop-limit %s' % hl
+                    # TODO: use DUA as source
+                    cmd += ' --source-ip %s' % db.get('exterior_ipv6_ll')
+                    cmd += ' --data-length %s' % size
+                else:
+                    # ICMP
+                    cmd = 'ping -6 -c1 -W2'
+                    cmd += ' -s%s -t%s -I%s %s' % (size, hl, iface, dst)
+                try:
+                    data = bash(cmd)
+                except Exception as e:
+                    logging.error(e)
+                    data = 'ping error'
+            elif kibra.__harness__ and self.path.startswith('/radvd'):
+                off = req.get('off')
+                backhaul = req.get('bh')
+                domain = req.get('dm')
+                if off:
+                    bash('service radvd stop')
+                elif backhaul and domain:
+                    if not db.get('exterior_ifname'):
+                        set_ext_iface()
+                    with open('/etc/radvd.conf', 'w') as file_:
+                        file_.write(
+                            'interface %s {\n' % db.get('exterior_ifname'))
+                        file_.write('  AdvSendAdvert on;\n')
+                        file_.write('  prefix %s { AdvAutonomous on; };\n' %
+                                    backhaul[0])
+                        file_.write('  prefix %s { AdvAutonomous off; };\n' %
+                                    domain[0])
+                        file_.write('};\n')
+                    bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
+                    bash('service radvd restart')
+                else:
+                    return
+                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/mdnsqry'):
+                bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
+                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/duastatus'):
+                db.set('dua_next_status', req.get('nxt')[0])
+                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/coap'):
+                db.set('coap_req', req)
+                data = 'OK'
             else:
                 self.send_response(http.HTTPStatus.NOT_FOUND)
                 return
