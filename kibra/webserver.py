@@ -35,8 +35,9 @@ IPPROTO_IPV6 = 41
 def _get_leases():
     leases = {}
     leases['leases'] = []
-    addrs = xml.etree.ElementTree.parse(LEASES_PATH).getroot()
-    if not addrs:
+    try:
+        addrs = xml.etree.ElementTree.parse(LEASES_PATH).getroot()
+    except:
         return leases
     for client in addrs.iter('AddrClient'):
         for addr_ia in client.iter('AddrIA'):
