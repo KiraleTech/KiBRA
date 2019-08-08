@@ -10,6 +10,7 @@ import time
 
 import aiocoap
 import aiocoap.resource as resource
+import kibra
 import kibra.database as db
 import kibra.network as NETWORK
 from aiocoap.numbers.codes import Code
@@ -496,7 +497,7 @@ class Res_N_DR(resource.Resource):
 
             if eid and dua:
                 # Thread Harness may force response status
-                if db.get('dua_next_status'):
+                if kibra.__harness__ and db.get('dua_next_status'):
                     status = int(db.get('dua_next_status'))
                     db.set('dua_next_status', '')
                 elif DUA_HNDLR.reg_update(eid, dua, elapsed):
@@ -900,8 +901,8 @@ class COAPSERVER(Ktask):
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()
 
-        # Thread Harness support
-        coap_con_request()
+        if kibra.__harness__:
+            coap_con_request()
     
 
 def coap_con_request():

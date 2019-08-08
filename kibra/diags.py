@@ -5,6 +5,7 @@ import logging
 import math
 import time
 
+import kibra
 import kibra.database as db
 import kibra.network as NETWORK
 from kibra.coapclient import CoapClient
@@ -68,17 +69,15 @@ class DIAGS(Ktask):
 
     def kstop(self):
         self.petitioner.stop()
-        #self.petitioner.loop.stop()
 
     async def periodic(self):
         # Check internet connection
-        '''
-        ping = int(
-            str(
-                bash('ping -c 1 -s 0 -I %s -q 8.8.8.8 > /dev/null ; echo $?' %
-                     db.get('exterior_ifname'))))
-        self.br_internet_access = 'online' if ping is 0 else 'offline'
-        '''
+        if not kibra.__harness__:
+            ping = int(
+                str(
+                    bash('ping -c 1 -s 0 -I %s -q 8.8.8.8 > /dev/null ; echo $?' %
+                        db.get('exterior_ifname'))))
+            self.br_internet_access = 'online' if ping is 0 else 'offline'
         # Diags
         response = await self.petitioner.con_request(
             self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
@@ -109,19 +108,18 @@ class DIAGS(Ktask):
                 PET_ACT_DATASET)
             self._parse_active_dataset(response)
             # Update nodes info
-            # TODO: this is commented not to generate noise in the test captures
-            '''
-            for rloc16 in self.nodes_list:
-                if rloc16 == self.br_rloc16:
-                    continue
-                node_rloc = NETWORK.get_rloc_from_short(
-                    db.get('dongle_prefix'), rloc16)
-                response = await self.petitioner.con_request(
-                    node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
-                self._parse_diags(response)
-                time.sleep(0.2)
-            self._mark_old_nodes()
-            '''
+            if not kibra.__harness__:
+                for rloc16 in self.nodes_list:
+                    if rloc16 == self.br_rloc16:
+                        continue
+                    node_rloc = NETWORK.get_rloc_from_short(
+                        db.get('dongle_prefix'), rloc16)
+                    response = await self.petitioner.con_request(
+                        node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
+                    self._parse_diags(response)
+                    time.sleep(0.2)
+                self._mark_old_nodes()
+
 
     def _parse_diags(self, tlvs):
         now = _epoch_ms()
