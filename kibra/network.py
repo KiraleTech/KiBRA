@@ -298,7 +298,6 @@ def _ifup():
                 priority=rule.get_attr('FRA_PRIORITY') or 0)
     IPR.rule(
         'add', family=socket.AF_INET6, table=rt_tables.get('local'), priority=1000)
-    '''
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
     # air)
     logging.info('Traffic rate limit established to %s on interface %s.',
@@ -310,7 +309,6 @@ def _ifup():
          'allot 1500 prio 5 bounded isolated')
     bash('tc filter add dev ' + db.get('interior_ifname') +
          ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1')
-    '''
 
 
 def _ifdown():
