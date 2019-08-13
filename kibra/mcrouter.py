@@ -142,7 +142,7 @@ class MCRouter():
                 if str(dst_addr) not in maddrs:
                     continue
                 out_mif = INT_MIF
-            # Packet from Thread Network (9.4.7.3)
+            # Packet from Thread Network (9.4.7.4)
             elif in_mif == INT_MIF:
                 # Rules 1 and 3 handled by KiNOS
                 # Filter by forwarding flags
