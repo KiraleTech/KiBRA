@@ -17,6 +17,8 @@ def nat_start(action):
     natMdnsStart I -> Insert the rules
     natMdnsStart D -> Delete the rules
     '''
+    # TODO: move this method to iptables.py
+
     # NAT 4 -> 6
     if db.has_keys(['exterior_ipv4']):
         if action == 'I':
@@ -28,8 +30,6 @@ def nat_start(action):
                  (db.get('exterior_ipv4'), str(db.get('exterior_port_mc')),
                   db.get('dongle_rloc'), str(db.get('bagent_port'))))
         # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
-        # Flush old rules first
-        bash('iptables -F -t mangle')
         bash(
             'iptables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
             % (action, db.get('exterior_ifname'), db.get('exterior_ipv4'),
