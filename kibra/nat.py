@@ -53,18 +53,3 @@ class NAT(Ktask):
         if self.nat_enabled:
             _nat_disable()
             self.nat_enabled = False
-
-    '''
-    def check_status(self):
-        logging.debug('Checking Jool status.')
-        jool_status = bash('jool session display')
-        try:
-            jool_status = re.search(r'%s(.*)%s' % ('Status: ', '\n'),
-                                    jool_status).group(1)
-        except:
-            jool_status = 'Stopped'
-        if jool_status == 'Enabled':
-            return status.RUNNING
-        else:
-            return status.STOPPED
-    '''
