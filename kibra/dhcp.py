@@ -5,7 +5,6 @@ import kitools
 
 import kibra.database as db
 from kibra.ktask import Ktask
-from kibra.network import dongle_route_disable, dongle_route_enable
 from kibra.shell import bash
 
 DHCP_CONFIG = '/etc/dibbler/server.conf'
@@ -50,21 +49,16 @@ class DHCP(Ktask):
             file_.write('\tclient-max-lease 1\n')
             file_.write('\tunicast ' + db.get('dongle_rloc') + '\n')
             file_.write('\trapid-commit yes\n')
-            # file_.write('\toption 224 address ' + db.get('dongle_rloc') + '\n') # CoAP RD
-            #file_.write('\toption 56 duid ' + ntp_server_opt(db.get('dongle_rloc')) + '\n')
             file_.write('\toption ntp-server ' + db.get('dongle_mleid') + '\n')
             file_.write('\toption dns-server ' + db.get('dongle_mleid') + '\n')
             file_.write('\tpreference 255\n')
             file_.write('\tclass {\n')
             file_.write('\t\tT1 0\n')
             file_.write('\t\tT2 0\n')
-            file_.write('\t\tpreferred-lifetime 1500\n')
-            file_.write('\t\tvalid-lifetime 1800\n')
+            file_.write('\t\tpreferred-lifetime 3600\n')
+            file_.write('\t\tvalid-lifetime 4000\n')
             file_.write('\t\tpool ' + db.get('prefix') + '\n')
             file_.write('\t}\n')
-            #file_.write('\tclient duid ' + db.get('dongle_mac') + ' {\n')
-            #file_.write('\t\taddress ' + db.get('dhcp_server') + '\n')
-            # file_.write('\t}\n')
             file_.write('}\n')
         # Allow for the file to be stored
         sleep(0.2)
@@ -86,7 +80,6 @@ class DHCP(Ktask):
                          '\n}\n')
         # Allow for the file to be stored
         sleep(0.2)
-        # Remove route
-        dongle_route_disable(db.get('prefix'))
+
         # Start DHCP daemon
         bash(DHCP_DAEMON + ' start')
