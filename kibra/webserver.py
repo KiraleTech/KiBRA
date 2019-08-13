@@ -177,7 +177,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
                 data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/duastatus'):
-                db.set('dua_next_status', req.get('nxt')[0])
+                db.set('dua_next_status', req.get('sta')[0])
+                db.set('dua_next_status_eid', req.get('eid')[0])
                 data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/coap'):
                 db.set('coap_req', req)

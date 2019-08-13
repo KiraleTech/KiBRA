@@ -49,6 +49,7 @@ DB_ITEMS = {
     'coap_req': [str, '', lambda x: True, False, False],
     'dhcp_aloc': [str, None, lambda x: True, False, False],
     'dua_next_status': [str, '', lambda x: True, False, False], # Thread Harness
+    'dua_next_status_eid': [str, '', lambda x: True, False, False], # Thread Harness
     'dongle_channel': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],

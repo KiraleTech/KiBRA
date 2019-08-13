@@ -497,8 +497,9 @@ class Res_N_DR(resource.Resource):
 
             if eid and dua:
                 # Thread Harness may force response status
-                if kibra.__harness__ and db.get('dua_next_status'):
+                if kibra.__harness__ and eid == db.get('dua_next_status_eid'):
                     status = int(db.get('dua_next_status'))
+                    db.set('dua_next_status_eid', '')
                     db.set('dua_next_status', '')
                 elif DUA_HNDLR.reg_update(eid, dua, elapsed):
                     status = DMStatus.ST_SUCESS
