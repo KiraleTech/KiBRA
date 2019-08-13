@@ -147,7 +147,7 @@ def _dongle_apply_config():
         send_cmd('config commcred "%s"' % db.get('dongle_commcred'))
 
     # Set role
-    role = db.get('dongle_role') or 'leader'
+    role = db.get('dongle_role')
     logging.info('Set dongle as %s.', role)
     send_cmd('config role %s' % role)
 
@@ -169,7 +169,7 @@ def _configure():
 
     # Different actions according to dongle status
     if dongle_status == 'none':
-        if db.get('discovered') == 0:
+        if not kibra.__harness__:
             _dongle_apply_config()
         _enable_br()
         send_cmd('ifup')

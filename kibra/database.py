@@ -49,7 +49,6 @@ DB_ITEMS = {
     'coap_req': [str, '', lambda x: True, False, False],
     'dhcp_aloc': [str, None, lambda x: True, False, False],
     'dua_next_status': [str, '', lambda x: True, False, False], # Thread Harness
-    'discovered': [int, 0, lambda x: x in (0, 1), True, False],
     'dongle_channel': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],
@@ -64,7 +63,7 @@ DB_ITEMS = {
     'dongle_panid': [str, None, lambda x: True, True, False],
     'dongle_prefix': [str, None, lambda x: True, True, False],
     'dongle_rloc': [str, None, lambda x: True, False, False],
-    'dongle_role': [str, None, lambda x: True, True, False],
+    'dongle_role': [str, 'leader', lambda x: True, True, False],
     'dongle_serial': [str, None, lambda x: True, False, True],
     'dongle_secpol': [str, None, lambda x: True, False, False],
     'dongle_sjitter': [str, '120', lambda x: True, True, True],
@@ -168,7 +167,6 @@ def load():
     for key in DB_ITEMS.keys():
         def_val = DB_ITEMS[key][DB_ITEMS_DEF]
         if def_val != None and not has_keys([key]):
-            print(key, def_val)
             set(key, def_val)
 
     # Save modified file

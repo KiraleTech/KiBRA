@@ -232,7 +232,6 @@ class HDP_Announcer():
             except:
                 payload = ''
             if payload == 'BBR':
-                db.set('discovered', 1)
                 dst_addr = request[1][0]
                 dst_port = request[1][1]
                 logging.info('HDP request from %s' % dst_addr)
@@ -259,22 +258,24 @@ def start():
     LOOP.run_in_executor(None, HTTPD.serve_forever)
     print('Webserver is up')
 
-    props = {
-        'ven': db.get('kibra_vendor'),
-        'mod': db.get('kibra_model'),
-        'ver': db.get('kibra_version')
-    }
-    # Announce via Harness Discovery Protocol
-    props['add'] = db.get('exterior_ipv6_ll')
-    props['por'] = WEB_PORT
-    ANNOUNCER = HDP_Announcer()
-    LOOP.run_in_executor(None, ANNOUNCER.start, props)
-    print('BBR announced via HDP')
+    if kibra.__harness__:
+        props = {
+            'ven': db.get('kibra_vendor'),
+            'mod': db.get('kibra_model'),
+            'ver': db.get('kibra_version')
+        }
+        # Announce via Harness Discovery Protocol
+        props['add'] = db.get('exterior_ipv6_ll')
+        props['por'] = WEB_PORT
+        ANNOUNCER = HDP_Announcer()
+        LOOP.run_in_executor(None, ANNOUNCER.start, props)
+        print('BBR announced via HDP')
 
 
 def stop():
     global ANNOUNCER
 
     print('Stopping web server...')
-    ANNOUNCER.stop()
+    if kibra.__harness__:
+        ANNOUNCER.stop()
     HTTPD.server_close()
