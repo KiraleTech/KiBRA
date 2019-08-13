@@ -9,7 +9,7 @@ device.
 
 It is written in Python 3, and provides a fast way for third-party developers
 to test they Thread products´ site and global connectivity, or an starting
-point for a commercial Border Router implementation.
+point for a comercial Border Router implementation.
 
 This project is licensed under the terms of the MIT license.
 
@@ -31,7 +31,7 @@ Features
 - Thread network real-time supervision with Thread Management Framework using a
   CoAP client (`aiocoap <https://github.com/chrysn/aiocoap/>`_).
 - Web based dynamic network visualization.
-- Includes a tool to easyly form a big test Thread network with other attached
+- Includes a tool to easily form a big test Thread network with other attached
   KiNOS devices.
 
   .. image:: images/KiBRA-Web.png
