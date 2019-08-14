@@ -169,6 +169,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                                     domain[0])
                         file_.write('};\n')
                     bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
+                    bash('ip -6 neighbor flush all')
                     bash('service radvd restart')
                 else:
                     return

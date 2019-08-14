@@ -7,6 +7,7 @@ import time
 
 import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 
+import kibra
 import kibra.database as db
 import kibra.iptables as iptables
 from kibra.ktask import Ktask
@@ -216,6 +217,10 @@ def _rt_add_table(name, number):
 
 
 def _ifup():
+    # For the Thread Harness, remove old neighbors
+    if kibra.__harness__:
+        bash('ip -6 neighbor flush all')
+
     # Make sure forwarding is enabled
     bash('echo 1 > /proc/sys/net/ipv4/conf/all/forwarding')
     bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
