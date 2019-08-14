@@ -93,7 +93,14 @@ class MulticastHandler():
         # Start the multicast routing daemon
         self.mcrouter = MCRouter()
 
+        # Multicast handler CoAP client
+        self.coap_client = CoapClient()
+
     def stop(self):
+        if self.coap_client is not None:
+            self.coap_client.stop()
+            self.coap_client = None
+
         self.mcrouter.stop()
 
     def reg_update(self, addrs, addr_tout):
@@ -239,9 +246,8 @@ class Res_N_MR(resource.Resource):
                 payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
                 dst = '%s%%%s' % (db.get('all_network_bbrs'),
                                   db.get('exterior_ifname'))
-                client = CoapClient()
-                await client.non_request(dst, DEFS.PORT_BB, URI.B_BMR, payload)
-                client.stop()
+                await MCAST_HNDLR.coap_client.non_request(dst, DEFS.PORT_BB, 
+                                                          URI.B_BMR, payload)
 
         # Fill and return the response
         out_pload = ThreadTLV(t=TLV.A_STATUS, l=1, v=[status]).array()
@@ -266,14 +272,14 @@ class DUAHandler():
         # Start the ND Proxy daemon
         self.ndproxy = NDProxy()
 
-        # CoAP client used for address notifications
-        self.ntf_client = CoapClient()
+        # DUA handler CoAP client
+        self.coap_client = CoapClient()
 
     def stop(self):
         self.ndproxy.stop()
-        if self.ntf_client is not None:
-            self.ntf_client.stop()
-            self.ntf_client = None
+        if self.coap_client is not None:
+            self.coap_client.stop()
+            self.coap_client = None
 
     def reg_update(self, eid, dua, elapsed):
         old_entry = None
@@ -374,11 +380,9 @@ class DUAHandler():
         logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
 
         if mode == aiocoap.CON:
-            await self.ntf_client.con_request(dst, port, uri, payload)
+            await self.coap_client.con_request(dst, port, uri, payload)
         else:
-            client = CoapClient()
-            await client.non_request(dst, port, uri, payload)
-            client.stop()
+            await self.coap_client.non_request(dst, port, uri, payload)
 
     async def send_addr_err(self, dua, eid_iid, dst_iid):
         'Thread 1.2 5.23.3.6.4'
@@ -394,20 +398,18 @@ class DUAHandler():
         logging.info(
             'out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
-        await self.ntf_client.con_request(dst.compressed, DEFS.PORT_MM,
+        await self.coap_client.con_request(dst.compressed, DEFS.PORT_MM,
                                           URI.A_AE, payload)
 
     async def perform_dad(self, entry):
-        client = CoapClient()
         # Send BB.qry DUA_DAD_REPEAT times
         for _ in range(DEFS.DUA_DAD_REPEAT):
-            await self.send_bb_query(client, entry.dua)
+            await self.send_bb_query(self.coap_client, entry.dua)
             await asyncio.sleep(DEFS.DUA_DAD_QUERY_TIMEOUT)
 
             # Finsih process if duplication was detected meanwhile
             if not entry.dad:
                 break
-        client.stop()
 
         # Set DAD flag as finished
         entry.dad = False
@@ -695,9 +697,7 @@ class Res_A_AQ(resource.Resource):
 
         # TODO: mantain a cache
         # Propagate Address Query to the Backbone
-        client = CoapClient()
-        await DUA_HNDLR.send_bb_query(client, dua, rloc16)
-        client.stop()
+        await DUA_HNDLR.send_bb_query(DUA_HNDLR.coap_client, dua, rloc16)
 
         return COAP_NO_RESPONSE
 
@@ -916,4 +916,4 @@ def coap_con_request():
         uri = req.get('uri')[0]
         pld = bytes.fromhex(req.get('pld')[0])
         logging.info('out %s ntf: %s' % (uri, ThreadTLV.sub_tlvs_str(pld)))
-        asyncio.ensure_future(DUA_HNDLR.ntf_client.con_request(dst, prt, uri, pld))
+        asyncio.ensure_future(DUA_HNDLR.coap_client.con_request(dst, prt, uri, pld))
