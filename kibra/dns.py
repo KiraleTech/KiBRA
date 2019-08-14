@@ -1,10 +1,9 @@
 from time import sleep
 
-import kitools
-
 import kibra.database as db
-from kibra.shell import bash
+import kitools
 from kibra.ktask import Ktask
+from kibra.shell import bash
 
 DNS_CONFIG = '/etc/unbound/unbound.conf'
 DNS_DAEMON = 'unbound'
@@ -18,7 +17,8 @@ class DNS(Ktask):
             start_keys=['dongle_mleid'],
             stop_keys=[],
             start_tasks=['network', 'serial', 'nat'],
-            period=1)
+            period=1,
+        )
 
     def kstart(self):
         # Don't start if DHCP is not to be used
@@ -28,7 +28,7 @@ class DNS(Ktask):
         # Stop DNS daemon
         bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration
-        db.del_from_file(DNS_CONFIG, '\nserver:','\n    dns64-synthall: yes\n')
+        db.del_from_file(DNS_CONFIG, '\nserver:', '\n    dns64-synthall: yes\n')
         # Add new configuration
         with open(DNS_CONFIG, 'w') as file_:
             file_.write('\nserver:')
@@ -47,11 +47,11 @@ class DNS(Ktask):
         if not db.get('prefix_dhcp'):
             return
 
-        #TODO: https://www.claudiokuenzler.com/blog/694/get-unbount-dns-lookups-resolution-working-ubuntu-16.04-xenial
+        # TODO: https://www.claudiokuenzler.com/blog/694/get-unbount-dns-lookups-resolution-working-ubuntu-16.04-xenial
         # Stop DNS daemon
         bash('service %s stop' % DNS_DAEMON)
         # Remove previous configuration for this dongle
-        db.del_from_file(DNS_CONFIG, '\nserver:','\n    dns64-synthall: yes\n')
+        db.del_from_file(DNS_CONFIG, '\nserver:', '\n    dns64-synthall: yes\n')
         # Allow for the file to be stored
         sleep(0.2)
         # Start DNS daemon

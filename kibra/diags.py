@@ -16,20 +16,26 @@ from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
 
 VALUES = [
-    TLV.D_MAC_ADDRESS, TLV.D_ROUTE64, TLV.D_LEADER_DATA,
-    TLV.D_IPV6_ADRESS_LIST, TLV.D_CHILD_TABLE
+    TLV.D_MAC_ADDRESS,
+    TLV.D_ROUTE64,
+    TLV.D_LEADER_DATA,
+    TLV.D_IPV6_ADRESS_LIST,
+    TLV.D_CHILD_TABLE,
 ]
 PET_DIAGS = ThreadTLV(t=TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
 
 VALUES = [
-    TLV.C_CHANNEL, TLV.C_PAN_ID, TLV.C_EXTENDED_PAN_ID, TLV.C_NETWORK_NAME,
-    TLV.C_NETWORK_MESH_LOCAL_PREFIX, TLV.C_ACTIVE_TIMESTAMP,
-    TLV.C_SECURITY_POLICY
+    TLV.C_CHANNEL,
+    TLV.C_PAN_ID,
+    TLV.C_EXTENDED_PAN_ID,
+    TLV.C_NETWORK_NAME,
+    TLV.C_NETWORK_MESH_LOCAL_PREFIX,
+    TLV.C_ACTIVE_TIMESTAMP,
+    TLV.C_SECURITY_POLICY,
 ]
 PET_ACT_DATASET = ThreadTLV(t=TLV.C_GET, l=len(VALUES), v=VALUES).array()
 
-PET_NET_DATA = ThreadTLV(
-    t=TLV.D_TYPE_LIST, l=1, v=[TLV.D_NETWORK_DATA]).array()
+PET_NET_DATA = ThreadTLV(t=TLV.D_TYPE_LIST, l=1, v=[TLV.D_NETWORK_DATA]).array()
 
 NODE_INACTIVE_MS = 90000
 
@@ -47,7 +53,8 @@ class DIAGS(Ktask):
             name='diags',
             start_keys=['dongle_ll', 'interior_ifname'],
             start_tasks=['serial', 'network'],
-            period=1)
+            period=1,
+        )
         self.petitioner = CoapClient()
         self.br_rloc16 = ''
         self.br_permanent_addr = ''
@@ -56,11 +63,9 @@ class DIAGS(Ktask):
         self.last_diags = []
         self.last_time = 0
 
-
     def kstart(self):
         ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
-        self.br_permanent_addr = '%s%%%s' % (ll_addr,
-                                             db.get('interior_ifname'))
+        self.br_permanent_addr = '%s%%%s' % (ll_addr, db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
         # Delete old values to prevent MDNS from using them before obtaning
         # the updated ones
@@ -68,10 +73,8 @@ class DIAGS(Ktask):
         db.delete('dongle_netname')
         db.set('bbr_status', 'off')
 
-
     def kstop(self):
         self.petitioner.stop()
-
 
     async def periodic(self):
         # Check internet connection
@@ -80,7 +83,8 @@ class DIAGS(Ktask):
             self.br_internet_access = 'online' if access else 'offline'
         # Diags
         response = await self.petitioner.con_request(
-            self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
+            self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
+        )
         if not response:
             return
 
@@ -94,18 +98,20 @@ class DIAGS(Ktask):
         # passed
         current_time = _epoch_ms()
         if response != self.last_diags or current_time > (
-                self.last_time + NODE_INACTIVE_MS):
+            self.last_time + NODE_INACTIVE_MS
+        ):
             self.last_diags = response
             self.last_time = current_time
             self._parse_diags(response)
             # Network Data get
             response = await self.petitioner.con_request(
-                self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA)
+                self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA
+            )
             self._parse_net_data(response)
             # Active Data Set get
             response = await self.petitioner.con_request(
-                self.br_permanent_addr, DEFS.PORT_MM, URI.C_AG,
-                PET_ACT_DATASET)
+                self.br_permanent_addr, DEFS.PORT_MM, URI.C_AG, PET_ACT_DATASET
+            )
             self._parse_active_dataset(response)
             # Update nodes info
             if not kibra.__harness__:
@@ -113,13 +119,14 @@ class DIAGS(Ktask):
                     if rloc16 == self.br_rloc16:
                         continue
                     node_rloc = NETWORK.get_rloc_from_short(
-                        db.get('dongle_prefix'), rloc16)
+                        db.get('dongle_prefix'), rloc16
+                    )
                     response = await self.petitioner.con_request(
-                        node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS)
+                        node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
+                    )
                     self._parse_diags(response)
                     time.sleep(0.2)
                 self._mark_old_nodes()
-
 
     def _parse_diags(self, tlvs):
         now = _epoch_ms()
@@ -175,24 +182,26 @@ class DIAGS(Ktask):
         # IPv6 Address List TLV
         value = ThreadTLV.get_value(tlvs, TLV.D_IPV6_ADRESS_LIST)
         if value:
-            addresses = [value[i:i + 16] for i in range(0, len(value), 16)]
+            addresses = [value[i : i + 16] for i in range(0, len(value), 16)]
             for addr in addresses:
                 str_addr = ipaddress.IPv6Address(
-                    int.from_bytes(addr, byteorder='big')).compressed
+                    int.from_bytes(addr, byteorder='big')
+                ).compressed
                 json_node_info['addresses'].append(str_addr)
 
         # Now process child info, because json_node_info['rloc16'] is needed
         # Child Table TLV
         value = ThreadTLV.get_value(tlvs, TLV.D_CHILD_TABLE)
         if value:
-            children = [value[i:i + 3] for i in range(0, len(value), 3)]
+            children = [value[i : i + 3] for i in range(0, len(value), 3)]
             for child in children:
                 json_child_info = {}
                 rloc_high = bytearray.fromhex(json_node_info['rloc16'])[0]
                 rloc_high |= child[0] & 0x01
                 json_child_info['rloc16'] = '%02x%02x' % (rloc_high, child[1])
                 json_child_info['timeout'] = '%u' % (
-                    child[0] >> 3)  # TODO: convert to seconds
+                    child[0] >> 3
+                )  # TODO: convert to seconds
                 json_node_info['children'].append(json_child_info)
 
         # Update other informations
@@ -256,18 +265,14 @@ class DIAGS(Ktask):
                 db.set('dongle_channel', int(value[2]))
             value = ThreadTLV.get_value(payload, TLV.C_PAN_ID)
             if value:
-                db.set('dongle_panid',
-                       '0x' + ''.join('%02x' % byte for byte in value))
+                db.set('dongle_panid', '0x' + ''.join('%02x' % byte for byte in value))
             value = ThreadTLV.get_value(payload, TLV.C_EXTENDED_PAN_ID)
             if value:
-                db.set('dongle_xpanid',
-                       '0x' + ''.join('%02x' % byte for byte in value))
+                db.set('dongle_xpanid', '0x' + ''.join('%02x' % byte for byte in value))
             value = ThreadTLV.get_value(payload, TLV.C_NETWORK_NAME)
             if value:
-                db.set('dongle_netname',
-                       ''.join('%c' % byte for byte in value))
-            value = ThreadTLV.get_value(payload,
-                                        TLV.C_NETWORK_MESH_LOCAL_PREFIX)
+                db.set('dongle_netname', ''.join('%c' % byte for byte in value))
+            value = ThreadTLV.get_value(payload, TLV.C_NETWORK_MESH_LOCAL_PREFIX)
             if value:
                 prefix_bytes = bytes(value) + bytes(8)
                 prefix_addr = ipaddress.IPv6Address(prefix_bytes)
@@ -285,41 +290,41 @@ class DIAGS(Ktask):
                 type_ = tlv.type >> 1
                 if type_ is TLV.N_SERVICE:
                     # Detect BBR Dataset encoding
-                    if (tlv.value[0] >> 7 and tlv.value[1] is 1
-                            and tlv.value[2] is 1):
+                    if tlv.value[0] >> 7 and tlv.value[1] is 1 and tlv.value[2] is 1:
                         server_tlvs = ThreadTLV.sub_tlvs(tlv.value[3:])
                         '''BBR is primary if there is only one Server TLV in the
                         BBR Dataset and the RLOC16 is the same as ours'''
                         if len(server_tlvs) == 1:
                             node_rloc = ipaddress.IPv6Address(
-                                db.get('dongle_rloc')).packed
+                                db.get('dongle_rloc')
+                            ).packed
                             if node_rloc[14:16] == server_tlvs[0].value[0:2]:
                                 is_pbbr = True
                 elif type_ is TLV.N_PREFIX:
                     if db.get('prefix_dhcp') and not db.get('dhcp_aloc'):
                         # Detect DHCPv6 Agent ALOC
-                        length = math.ceil(tlv.value[1]/8)
-                        byt_prefix = tlv.value[2:2+length] + bytes(length)
+                        length = math.ceil(tlv.value[1] / 8)
+                        byt_prefix = tlv.value[2 : 2 + length] + bytes(length)
                         int_prefix = int.from_bytes(byt_prefix, byteorder='big')
                         str_prefix = ipaddress.IPv6Address(int_prefix).compressed
                         str_prefix += '/%s' % tlv.value[1]
                         if str_prefix == db.get('prefix'):
                             # This is the prefix that we announced
-                            for subtlv in ThreadTLV.sub_tlvs(tlv.value[(length+2):]):
+                            for subtlv in ThreadTLV.sub_tlvs(tlv.value[(length + 2) :]):
                                 # TODO: verify that there is a Border Router TLV
                                 # matching our RLOC16 and DHCP flag
                                 if subtlv.type >> 1 is TLV.N_6LOWPAN_ID:
-                                    cid = subtlv.value[0] & 0x0f
+                                    cid = subtlv.value[0] & 0x0F
                                     rloc = db.get('dongle_rloc')
                                     aloc = list(ipaddress.IPv6Address(rloc).packed)
-                                    aloc[14] = 0xfc
+                                    aloc[14] = 0xFC
                                     aloc[15] = cid
                                     aloc = ipaddress.IPv6Address(bytes(aloc)).compressed
                                     db.set('dhcp_aloc', aloc)
                                     # Listen to the DHCP ALOC which is going to be
                                     # used by BR MTD children
                                     netmap(aloc, rloc)
-        
+
         if is_pbbr:
             if 'primary' not in db.get('bbr_status'):
                 logging.info('Setting this BBR as Primary')

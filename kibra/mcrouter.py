@@ -42,7 +42,7 @@ mf6cctl_fmt = '28s28sHH32s'  # Second H is padding for the non-packed struct
 mrt6msg_fmt = 'BBHI16s16s'
 
 
-class MCRoute():
+class MCRoute:
     def __init__(self, src, dst, in_mif, out_mif):
         self.src = src
         self.dst = dst
@@ -74,27 +74,32 @@ class MCRoute():
             remaining = 0
 
         return '(%s --> %s) Group: %s  Source: %s Remaining: %d s' % (
-            in_mif, out_mif, dst, src, remaining)
+            in_mif,
+            out_mif,
+            dst,
+            src,
+            remaining,
+        )
 
 
-class MCRouter():
+class MCRouter:
     def __init__(self):
         # Create and init the IPv6 Multicast Routing socket
-        self.mc6r_sock = socket.socket(socket.AF_INET6, socket.SOCK_RAW,
-                                       IPPROTO_ICMPV6)
+        self.mc6r_sock = socket.socket(socket.AF_INET6, socket.SOCK_RAW, IPPROTO_ICMPV6)
         self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_INIT, 1)
 
         # Add multicast interfaces to the socket
-        mif6ctl_ext = struct.pack(mif6ctl_fmt, EXT_MIF, 0, 0,
-                                  db.get('exterior_ifnumber'), 0)
-        mif6ctl_int = struct.pack(mif6ctl_fmt, INT_MIF, 0, 0,
-                                  db.get('interior_ifnumber'), 0)
+        mif6ctl_ext = struct.pack(
+            mif6ctl_fmt, EXT_MIF, 0, 0, db.get('exterior_ifnumber'), 0
+        )
+        mif6ctl_int = struct.pack(
+            mif6ctl_fmt, INT_MIF, 0, 0, db.get('interior_ifnumber'), 0
+        )
         self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_ADD_MIF, mif6ctl_ext)
         self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_ADD_MIF, mif6ctl_int)
 
         # Create the IPv6 Multicast Groups socket
-        self.mc6g_sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM,
-                                       IPPROTO_UDP)
+        self.mc6g_sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM, IPPROTO_UDP)
 
         # Initialize the list of multicast routes
         self.mcroutes = []
@@ -121,13 +126,16 @@ class MCRouter():
 
             # Get the upcall paramters
             _, type_, in_mif, _, src, dst = struct.unpack(
-                mrt6msg_fmt, data[:struct.calcsize(mrt6msg_fmt)])
+                mrt6msg_fmt, data[: struct.calcsize(mrt6msg_fmt)]
+            )
 
             # Debug
             src_addr = ipaddress.IPv6Address(src).compressed
             dst_addr = ipaddress.IPv6Address(dst).compressed
-            logging.debug('Upcall: type=%d mif=%d src=%s dst=%s' %
-                  (type_, in_mif, src_addr, dst_addr))
+            logging.debug(
+                'Upcall: type=%d mif=%d src=%s dst=%s'
+                % (type_, in_mif, src_addr, dst_addr)
+            )
 
             if type_ != MRT6MSG_NOCACHE:
                 continue
@@ -137,8 +145,7 @@ class MCRouter():
                 # Filter by registered multicast groups
                 if not db.get('mlr_cache'):
                     continue
-                maddrs = list(
-                    json.loads(db.get('mlr_cache').replace("'", '"')).keys())
+                maddrs = list(json.loads(db.get('mlr_cache').replace("'", '"')).keys())
                 if str(dst_addr) not in maddrs:
                     continue
                 out_mif = INT_MIF
@@ -146,7 +153,7 @@ class MCRouter():
             elif in_mif == INT_MIF:
                 # Rules 1 and 3 handled by KiNOS
                 # Filter by forwarding flags
-                dst_scope = dst[1] & 0x0f
+                dst_scope = dst[1] & 0x0F
                 if dst_scope < 4:
                     continue
                 if db.get('mcast_out_fwd') == 0:
@@ -176,8 +183,7 @@ class MCRouter():
             # Remove it because it's going to be added with updated timeout
             self.mcroutes.pop(old_route)
         else:
-            self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_ADD_MFC,
-                                      route.get_mf6cctl())
+            self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_ADD_MFC, route.get_mf6cctl())
 
         # Save the newly created route
         self.mcroutes.append(route)
@@ -191,25 +197,25 @@ class MCRouter():
         self.mcroutes = [x for x in self.mcroutes if x.expiry > now]
 
         for old_route in old_routes:
-            self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_DEL_MFC,
-                                      old_route.get_mf6cctl())
+            self.mc6r_sock.setsockopt(
+                IPPROTO_IPV6, MRT6_DEL_MFC, old_route.get_mf6cctl()
+            )
             logging.info('Route removed: %s' % old_route)
 
     def rem_group_routes(self, mcgroup):
         mcgroup = ipaddress.IPv6Address(mcgroup).packed
         # TODO: optimize this
         old_routes = [
-            x for x in self.mcroutes
-            if x.dst == mcgroup and x.out_mif == INT_MIF
+            x for x in self.mcroutes if x.dst == mcgroup and x.out_mif == INT_MIF
         ]
         self.mcroutes = [
-            x for x in self.mcroutes
-            if not (x.dst == mcgroup and x.out_mif == INT_MIF)
+            x for x in self.mcroutes if not (x.dst == mcgroup and x.out_mif == INT_MIF)
         ]
 
         for old_route in old_routes:
-            self.mc6r_sock.setsockopt(IPPROTO_IPV6, MRT6_DEL_MFC,
-                                      old_route.get_mf6cctl())
+            self.mc6r_sock.setsockopt(
+                IPPROTO_IPV6, MRT6_DEL_MFC, old_route.get_mf6cctl()
+            )
             logging.info('Route removed: %s' % old_route)
 
     def join_leave_group(self, action, mcgroup, ifnumber=None):

@@ -13,8 +13,8 @@ import urllib
 import xml.etree.ElementTree
 
 import kibra
-import kibra.database as db
 import kibra.coapserver as coap_server
+import kibra.database as db
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
 from kibra.network import set_ext_iface
@@ -46,7 +46,8 @@ def _get_leases():
                     node = {}
                     node['duid'] = addr_ia.find('duid').text
                     node['expires'] = 1000 * (
-                        int(addr.get('timestamp')) + int(addr.get('valid')))
+                        int(addr.get('timestamp')) + int(addr.get('valid'))
+                    )
                     node['gua'] = addr.text
                     if node['expires'] > time.time():
                         leases['leases'].append(node)
@@ -111,8 +112,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                         db.set(key, value[0])
                         modif_keys.add(key)
                 # Special actions
-                if not set(['mlr_timeout', 'rereg_delay'
-                            ]).isdisjoint(modif_keys):
+                if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
                     bbr_dataset_update()
                 data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/ksh'):
@@ -160,13 +160,12 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     if not db.get('exterior_ifname'):
                         set_ext_iface()
                     with open('/etc/radvd.conf', 'w') as file_:
-                        file_.write(
-                            'interface %s {\n' % db.get('exterior_ifname'))
+                        file_.write('interface %s {\n' % db.get('exterior_ifname'))
                         file_.write('  AdvSendAdvert on;\n')
-                        file_.write('  prefix %s { AdvAutonomous on; };\n' %
-                                    backhaul[0])
-                        file_.write('  prefix %s { AdvAutonomous off; };\n' %
-                                    domain[0])
+                        file_.write(
+                            '  prefix %s { AdvAutonomous on; };\n' % backhaul[0]
+                        )
+                        file_.write('  prefix %s { AdvAutonomous off; };\n' % domain[0])
                         file_.write('};\n')
                     bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
                     bash('ip -6 neighbor flush all')
@@ -207,7 +206,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-class HDP_Announcer():
+class HDP_Announcer:
     def __init__(self):
         self.run = False
         self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
@@ -237,8 +236,7 @@ class HDP_Announcer():
                 dst_addr = request[1][0]
                 dst_port = request[1][1]
                 logging.info('HDP request from %s' % dst_addr)
-                self.sock.sendto(
-                    json.dumps(props).encode(), (dst_addr, dst_port))
+                self.sock.sendto(json.dumps(props).encode(), (dst_addr, dst_port))
 
     def stop(self):
         self.run = False
@@ -264,7 +262,7 @@ def start():
         props = {
             'ven': db.get('kibra_vendor'),
             'mod': db.get('kibra_model'),
-            'ver': db.get('kibra_version')
+            'ver': db.get('kibra_version'),
         }
         # Announce via Harness Discovery Protocol
         props['add'] = db.get('exterior_ipv6_ll')

@@ -41,15 +41,15 @@ DB_ITEMS = {
     'all_network_bbrs': [str, None, lambda x: True, True, False],
     'autostart': [int, 0, lambda x: x in (0, 1), True, False],
     'bagent_port': [int, DEFS.PORT_MC, lambda x: True, False, False],
-    'bbr_port': [int, DEFS.PORT_BB, lambda x: x >= 0 and x < 0xffff, False, False],
-    'bbr_seq': [int, DEFS.BBR_SEQ, lambda x: x >= 0 and x < 0xff, False, True],
+    'bbr_port': [int, DEFS.PORT_BB, lambda x: x >= 0 and x < 0xFFFF, False, False],
+    'bbr_seq': [int, DEFS.BBR_SEQ, lambda x: x >= 0 and x < 0xFF, False, True],
     'bbr_status': [str, None, lambda x: True, False, False],
     'bridging_mark': [int, None, lambda x: True, False, False],
     'bridging_table': [str, None, lambda x: True, False, False],
     'coap_req': [str, '', lambda x: True, False, False],
     'dhcp_aloc': [str, None, lambda x: True, False, False],
-    'dua_next_status': [str, '', lambda x: True, False, False], # Thread Harness
-    'dua_next_status_eid': [str, '', lambda x: True, False, False], # Thread Harness
+    'dua_next_status': [str, '', lambda x: True, False, False],  # Thread Harness
+    'dua_next_status_eid': [str, '', lambda x: True, False, False],  # Thread Harness
     'dongle_channel': [int, None, lambda x: True, True, False],
     'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],
@@ -83,17 +83,35 @@ DB_ITEMS = {
     'interior_mac': [str, None, lambda x: True, False, False],
     'kibra_vendor': [str, kibra.__vendor__, lambda x: True, False, False],
     'kibra_model': [str, kibra.__model__, lambda x: True, False, False],
-    'kibra_version': [str, 'KiBRA v%s' % kibra.__version__, lambda x: True, False, False],
+    'kibra_version': [
+        str,
+        'KiBRA v%s' % kibra.__version__,
+        lambda x: True,
+        False,
+        False,
+    ],
     'maddrs_perm': [str, None, lambda x: True, False, False],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mlr_cache': [str, None, lambda x: True, False, False],
-    'mlr_timeout': [int, DEFS.BBR_DEF_MLR_TIMEOUT, lambda x: x >= 300 and x < 0xffffffff, True, True],
+    'mlr_timeout': [
+        int,
+        DEFS.BBR_DEF_MLR_TIMEOUT,
+        lambda x: x >= 300 and x < 0xFFFFFFFF,
+        True,
+        True,
+    ],
     'prefix': [str, None, lambda x: True, True, True],
     'prefix_active': [int, 0, lambda x: True, True, True],
     'prefix_dhcp': [int, 0, lambda x: True, True, True],
     'prefix_dua': [int, 0, lambda x: True, True, True],
-    'rereg_delay': [int, DEFS.BBR_DEF_REREG_DELAY, lambda x: x >= 1 and x < 0xffff, True, True],
+    'rereg_delay': [
+        int,
+        DEFS.BBR_DEF_REREG_DELAY,
+        lambda x: x >= 1 and x < 0xFFFF,
+        True,
+        True,
+    ],
     'serial_device': [str, None, lambda x: True, False, False],
     'status_coapserver': [str, None, lambda x: True, False, False],
     'status_dhcp': [str, None, lambda x: True, False, False],
@@ -213,10 +231,8 @@ def del_from_file(file, start_patt, end_patt):
         with open(file, 'r+') as file_:
             data = file_.read()
             data = re.sub(
-                r'%s(.*?)%s' % (start_patt, end_patt),
-                '',
-                data,
-                flags=re.DOTALL)
+                r'%s(.*?)%s' % (start_patt, end_patt), '', data, flags=re.DOTALL
+            )
             file_.seek(0)
             file_.truncate()
             file_.write(data)

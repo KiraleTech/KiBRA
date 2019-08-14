@@ -22,34 +22,70 @@ def nat_start(action):
     # NAT 4 -> 6
     if db.has_keys(['exterior_ipv4']):
         if action == 'I':
-            bash('jool bib add %s#%s %s#%s --udp' %
-                 (db.get('exterior_ipv4'), str(db.get('exterior_port_mc')),
-                  db.get('dongle_rloc'), str(db.get('bagent_port'))))
+            bash(
+                'jool bib add %s#%s %s#%s --udp'
+                % (
+                    db.get('exterior_ipv4'),
+                    str(db.get('exterior_port_mc')),
+                    db.get('dongle_rloc'),
+                    str(db.get('bagent_port')),
+                )
+            )
         else:
-            bash('jool bib remove %s#%s %s#%s --udp' %
-                 (db.get('exterior_ipv4'), str(db.get('exterior_port_mc')),
-                  db.get('dongle_rloc'), str(db.get('bagent_port'))))
+            bash(
+                'jool bib remove %s#%s %s#%s --udp'
+                % (
+                    db.get('exterior_ipv4'),
+                    str(db.get('exterior_port_mc')),
+                    db.get('dongle_rloc'),
+                    str(db.get('bagent_port')),
+                )
+            )
         # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
         bash(
             'iptables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
-            % (action, db.get('exterior_ifname'), db.get('exterior_ipv4'),
-               db.get('exterior_port_mc'), db.get('bridging_mark')))
+            % (
+                action,
+                db.get('exterior_ifname'),
+                db.get('exterior_ipv4'),
+                db.get('exterior_port_mc'),
+                db.get('bridging_mark'),
+            )
+        )
     # NAT 6 -> 6
     if db.has_keys(['exterior_ipv6_ll']):
         bash(
             'ip6tables -w -t nat -%s PREROUTING -i %s -d %s -p udp --dport %d -j DNAT --to [%s]:%d'
-            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6_ll'),
-               db.get('exterior_port_mc'), db.get('dongle_rloc'),
-               db.get('bagent_port')))
+            % (
+                action,
+                db.get('exterior_ifname'),
+                db.get('exterior_ipv6_ll'),
+                db.get('exterior_port_mc'),
+                db.get('dongle_rloc'),
+                db.get('bagent_port'),
+            )
+        )
         bash(
             'ip6tables -w -t nat -%s POSTROUTING -o %s -s %s -p udp --sport %d -j SNAT --to [%s]:%d'
-            % (action, db.get('exterior_ifname'), db.get('dongle_rloc'),
-               db.get('bagent_port'), db.get('exterior_ipv6_ll'),
-               db.get('exterior_port_mc')))
+            % (
+                action,
+                db.get('exterior_ifname'),
+                db.get('dongle_rloc'),
+                db.get('bagent_port'),
+                db.get('exterior_ipv6_ll'),
+                db.get('exterior_port_mc'),
+            )
+        )
         bash(
             'ip6tables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
-            % (action, db.get('exterior_ifname'), db.get('exterior_ipv6_ll'),
-               db.get('exterior_port_mc'), db.get('bridging_mark')))
+            % (
+                action,
+                db.get('exterior_ifname'),
+                db.get('exterior_ipv6_ll'),
+                db.get('exterior_port_mc'),
+                db.get('bridging_mark'),
+            )
+        )
 
 
 def get_records():
@@ -127,7 +163,8 @@ class MDNS(Ktask):
             self,
             name='mdns',
             start_keys=['exterior_ifname', 'bbr_seq', 'bbr_port'],
-            period=2)
+            period=2,
+        )
         self.nat_enabled = False
 
     async def periodic(self):
@@ -197,8 +234,10 @@ class MDNS(Ktask):
         snw.append('<?xml version="1.0" encoding="utf-8" standalone="no"?>')
         snw.append('<!DOCTYPE service-group SYSTEM "avahi-service.dtd">')
         snw.append('<service-group>')
-        snw.append('\t<name>%s %s %s</name>' % (db.get('dongle_name'),
-                                                records['vn'], records['mn']))
+        snw.append(
+            '\t<name>%s %s %s</name>'
+            % (db.get('dongle_name'), records['vn'], records['mn'])
+        )
         snw.append('\t<service>')
         snw.append('\t\t<type>_meshcop._udp</type>')
         snw.append('\t\t<host-name>%s.local</host-name>' % hostname)

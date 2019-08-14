@@ -6,7 +6,7 @@ from aiocoap.numbers.codes import Code
 from kibra.tlv import ThreadTLV
 
 
-class CoapClient():
+class CoapClient:
     '''Perform CoAP petitions to the Thread Diagnostics port'''
 
     def __init__(self):
@@ -31,7 +31,8 @@ class CoapClient():
             if mtype == aiocoap.NON:
                 try:
                     await asyncio.wait_for(
-                        self.context.request(req).response, timeout=0.001)
+                        self.context.request(req).response, timeout=0.001
+                    )
                 except asyncio.TimeoutError:
                     return
             else:
@@ -40,8 +41,9 @@ class CoapClient():
             logging.warn('No response from %s', addr)
         else:
             logging.debug(
-                'rx: %s %s %s' % (addr, response.code,
-                                  ThreadTLV.sub_tlvs_str(response.payload)))
+                'rx: %s %s %s'
+                % (addr, response.code, ThreadTLV.sub_tlvs_str(response.payload))
+            )
             return response.payload
 
     def stop(self):

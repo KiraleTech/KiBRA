@@ -112,13 +112,17 @@ def _main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        prog='kibra', description='Kirale Border Router Administration')
+        prog='kibra', description='Kirale Border Router Administration'
+    )
     parser.add_argument(
-        '--daemon', required=False, action='store_true', help='run as a daemon')
+        '--daemon', required=False, action='store_true', help='run as a daemon'
+    )
     parser.add_argument(
-        '--form', required=False, action='store_true', help='form topology')
+        '--form', required=False, action='store_true', help='form topology'
+    )
     parser.add_argument(
-        '--clear', required=False, action='store_true', help='clear topology')
+        '--clear', required=False, action='store_true', help='clear topology'
+    )
     args = parser.parse_args()
 
     # Configure logging
@@ -127,7 +131,8 @@ if __name__ == '__main__':
         level=logging.INFO,
         format='\r%(asctime)s - %(levelname)s [%(module)s]: %(message)s',
         filename=db.LOG_FILE,
-        filemode='w')
+        filemode='w',
+    )
 
     if args.form:
         topology.form_topology()

@@ -1,4 +1,4 @@
-class ThreadTLV():
+class ThreadTLV:
     '''Thread TLV representation'''
 
     def __init__(self, data=None, t=None, l=None, v=None):
@@ -53,7 +53,7 @@ class ThreadTLV():
             tlvs.append(ThreadTLV(data[:size]))
             data = data[size:]
         return tlvs
-    
+
     @staticmethod
     def sub_tlvs_str(payload):
         sub_tlvs = ThreadTLV.sub_tlvs(payload)

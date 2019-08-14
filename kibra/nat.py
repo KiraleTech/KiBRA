@@ -3,8 +3,8 @@ import re
 
 import kibra.database as db
 import kibra.ksh as KSH
-from kibra.shell import bash
 from kibra.ktask import Ktask, status
+from kibra.shell import bash
 
 
 def _nat_enable():
@@ -16,14 +16,12 @@ def _nat_enable():
     logging.info('Prefix 64:ff9b::/96 added to NAT64 engine.')
     bash('jool pool4 add --udp %s' % db.get('exterior_ipv4'))
     bash('jool pool4 add --icmp %s' % db.get('exterior_ipv4'))
-    logging.info('%s used as stateful NAT64 masking address.',
-                 db.get('exterior_ipv4'))
+    logging.info('%s used as stateful NAT64 masking address.', db.get('exterior_ipv4'))
 
 
 def _nat_disable():
     if db.has_keys(['exterior_ipv4']):
-        bash('jool pool4 remove --udp %s' %
-             db.get('exterior_ipv4'))
+        bash('jool pool4 remove --udp %s' % db.get('exterior_ipv4'))
         bash('jool pool4 remove --icmp %s' % db.get('exterior_ipv4'))
     bash('/sbin/modprobe -r jool')
 
@@ -36,7 +34,8 @@ class NAT(Ktask):
             start_keys=[],
             stop_keys=[],
             start_tasks=['serial'],
-            period=3)
+            period=3,
+        )
         self.nat_enabled = False
 
     async def periodic(self):

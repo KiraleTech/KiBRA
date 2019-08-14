@@ -1,10 +1,10 @@
 import logging
 import os
-import importlib_resources
 import struct
 import sys
 import time
 
+import importlib_resources
 import kibra
 import kibra.database as db
 from kibra.ktask import Ktask
@@ -89,8 +89,7 @@ def enable_ncp():
         return
     logging.info('Serial device is %s.', port)
     db.set('serial_device', port)
-    SERIAL_DEV = kiserial.KiSerial(
-        port, debug=kiserial.KiDebug(kiserial.KiDebug.NONE))
+    SERIAL_DEV = kiserial.KiSerial(port, debug=kiserial.KiDebug(kiserial.KiDebug.NONE))
     send_cmd('debug level none', debug_level=kiserial.KiDebug.NONE)
 
     # Save serial number
@@ -114,7 +113,7 @@ def enable_ncp():
             time.sleep(3)
             del SERIAL_DEV
             enable_ncp()
-        
+
 
 def _dongle_apply_config():
     # Config network parameters
@@ -138,12 +137,12 @@ def _dongle_apply_config():
         logging.info('Configure dongle panid %s.', db.get('dongle_panid'))
         send_cmd('config panid %s' % db.get('dongle_panid'))
     if 'dongle_netname' in db.CFG:
-        logging.info('Configure dongle network name %s.',
-                     db.get('dongle_netname'))
+        logging.info('Configure dongle network name %s.', db.get('dongle_netname'))
         send_cmd('config netname "%s"' % db.get('dongle_netname'))
     if 'dongle_commcred' in db.CFG:
-        logging.info('Configure dongle comissioner credential %s.',
-                     db.get('dongle_commcred'))
+        logging.info(
+            'Configure dongle comissioner credential %s.', db.get('dongle_commcred')
+        )
         send_cmd('config commcred "%s"' % db.get('dongle_commcred'))
 
     # Set role
@@ -155,16 +154,14 @@ def _dongle_apply_config():
 def _configure():
     global SERIAL_DEV
 
-    dongle_status = send_cmd(
-        'show status', debug_level=kiserial.KiDebug.NONE)[0]
+    dongle_status = send_cmd('show status', debug_level=kiserial.KiDebug.NONE)[0]
 
     # Wait for the dongle to reach a steady status
     logging.info('Waiting until dongle is joined...')
     db.set('dongle_status', 'disconnected')
     dongle_status = ''
     while not ('none' in dongle_status or 'joined' in dongle_status):
-        dongle_status = send_cmd(
-            'show status', debug_level=kiserial.KiDebug.NONE)[0]
+        dongle_status = send_cmd('show status', debug_level=kiserial.KiDebug.NONE)[0]
         time.sleep(1)
 
     # Different actions according to dongle status
@@ -236,13 +233,17 @@ def bbr_dataset_update():
     Automatically increases the sequence number
     '''
     # Increase sequence number
-    bbr_sequence_number = (db.get('bbr_seq') + 1) % 0xff
+    bbr_sequence_number = (db.get('bbr_seq') + 1) % 0xFF
 
     # Build s_server_data
     reregistration_delay = db.get('rereg_delay')
     mlr_timeout = db.get('mlr_timeout')
-    s_server_data = struct.pack(DEFS.THREAD_SERVICE_DATA_FMT, bbr_sequence_number,
-                                reregistration_delay, mlr_timeout)
+    s_server_data = struct.pack(
+        DEFS.THREAD_SERVICE_DATA_FMT,
+        bbr_sequence_number,
+        reregistration_delay,
+        mlr_timeout,
+    )
 
     # Store used values
     db.set('bbr_seq', bbr_sequence_number)
@@ -251,27 +252,35 @@ def bbr_dataset_update():
     db.save()
 
     # Enable BBR
-    send_cmd('config service add %u %s %s' % (DEFS.THREAD_ENTERPRISE_NUMBER,
-                                              DEFS.THREAD_SERVICE_DATA_BBR,
-                                              bytes(s_server_data).hex()))
-    logging.info('BBR update: Seq. = %d MLR Timeout = %d, Rereg. Delay = %d' %
-                 (bbr_sequence_number, mlr_timeout, reregistration_delay))
+    send_cmd(
+        'config service add %u %s %s'
+        % (
+            DEFS.THREAD_ENTERPRISE_NUMBER,
+            DEFS.THREAD_SERVICE_DATA_BBR,
+            bytes(s_server_data).hex(),
+        )
+    )
+    logging.info(
+        'BBR update: Seq. = %d MLR Timeout = %d, Rereg. Delay = %d'
+        % (bbr_sequence_number, mlr_timeout, reregistration_delay)
+    )
 
 
 def prefix_handle(
-        type_: str,  # 'prefix' or 'route'
-        action: str,  # 'add' or 'remove'
-        prefix: str,  # 'prefix/length'
-        stable=False,
-        on_mesh=False,
-        preferred=False,
-        slaac=False,
-        dhcp=False,
-        configure=False,
-        default=False,
-        preference='medium',
-        nd_dns=False,
-        dp=False):
+    type_: str,  # 'prefix' or 'route'
+    action: str,  # 'add' or 'remove'
+    prefix: str,  # 'prefix/length'
+    stable=False,
+    on_mesh=False,
+    preferred=False,
+    slaac=False,
+    dhcp=False,
+    configure=False,
+    default=False,
+    preference='medium',
+    nd_dns=False,
+    dp=False,
+):
     '''
     5.18.3 Border Router TLV, 16 bits of flags:
     0 - Reserved --> Used by Kirale command to indicate Stable
@@ -339,7 +348,8 @@ class SERIAL(Ktask):
             name='serial',
             start_keys=['dongle_serial'],
             stop_tasks=['diags', 'coapserver'],
-            period=2)
+            period=2,
+        )
 
     def kstart(self):
         db.set('prefix_active', 0)
@@ -349,7 +359,7 @@ class SERIAL(Ktask):
         _bagent_on()
 
     def kstop(self):
-        if db.get('prefix_active'):         
+        if db.get('prefix_active'):
             # Remove prefix from the network
             dp = True if db.get('prefix_dua') else False
             dhcp = True if db.get('prefix_dhcp') else False
@@ -364,8 +374,9 @@ class SERIAL(Ktask):
                 default=True,
                 slaac=slaac,
                 dhcp=dhcp,
-                dp=dp)
-            
+                dp=dp,
+            )
+
             # Mark prefix as active
             db.set('prefix_active', 0)
 
@@ -377,11 +388,10 @@ class SERIAL(Ktask):
         try:
             SERIAL_DEV.is_active()
         except IOError:
-            logging.error('Device %s has been disconnected.',
-                          db.get('serial_device'))
+            logging.error('Device %s has been disconnected.', db.get('serial_device'))
             self.kstop()
             self.kill()
-        
+
         if not db.get('prefix_active'):
             dp = True if db.get('prefix_dua') else False
             dhcp = True if db.get('prefix_dhcp') else False
@@ -392,7 +402,7 @@ class SERIAL(Ktask):
                 return
             if dp and db.get('status_coapserver') not in 'running':
                 return
-            
+
             # Add route
             dongle_route_enable(db.get('prefix'))
 
@@ -406,8 +416,9 @@ class SERIAL(Ktask):
                 default=True,
                 slaac=slaac,
                 dhcp=dhcp,
-                dp=dp)
-            
+                dp=dp,
+            )
+
             if dp:
                 bbr_dataset_update()
 

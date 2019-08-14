@@ -1,15 +1,14 @@
 import hashlib
 import ipaddress
 import logging
-import struct
 import socket
+import struct
 import time
-
-import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 
 import kibra
 import kibra.database as db
 import kibra.iptables as iptables
+import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 from kibra.ktask import Ktask
 from kibra.shell import bash
 
@@ -23,20 +22,21 @@ IFF_MULTICAST = 0x1000
 
 
 def internet_access(host='1.1.1.1', port=53, timeout=0.7):
-  try:
-    socket.setdefaulttimeout(timeout)
-    socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
-    return True
-  except socket.error:
-    return False
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except socket.error:
+        return False
 
 
 def get_prefix_based_mcast(prefix, groupid):
     '''RFC 3306'''
     prefix = prefix.split('/')[0]
     prefix_bytes = ipaddress.IPv6Address(prefix).packed
-    maddr_bytes = bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack(
-        '>I', groupid)
+    maddr_bytes = (
+        bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack('>I', groupid)
+    )
     return ipaddress.IPv6Address(maddr_bytes).compressed
 
 
@@ -71,8 +71,7 @@ def global_netconfig():
     # Link-local IPv4 addresses
     ipv4_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET, scope=253)
     if ipv4_addrs:
-        logging.info('Using %s as exterior IPv4 link-local address.',
-                     ipv4_addrs[0])
+        logging.info('Using %s as exterior IPv4 link-local address.', ipv4_addrs[0])
         db.set('exterior_ipv4_ll', ipv4_addrs[0])
 
     # Global IPv6 addresses
@@ -84,8 +83,7 @@ def global_netconfig():
     # Link-local IPv6 addresses
     ipv6_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET6, scope=253)
     if ipv6_addrs:
-        logging.info('Using %s as exterior link-local IPv6 address.',
-                     ipv6_addrs[0])
+        logging.info('Using %s as exterior link-local IPv6 address.', ipv6_addrs[0])
         db.set('exterior_ipv6_ll', ipv6_addrs[0])
 
 
@@ -99,8 +97,7 @@ def _get_ula():
     sha.update((ntp_time + eui64).encode())  # SHA1 of Time + EUI64
     sha = sha.hexdigest().zfill(40)
     # fd + last 40 bits of SHA1
-    ula = ipaddress.IPv6Address(
-        int('fd' + sha[-10:] + '00000000000000000000', 16))
+    ula = ipaddress.IPv6Address(int('fd' + sha[-10:] + '00000000000000000000', 16))
     return ula.compressed + '/48'
 
 
@@ -175,10 +172,16 @@ def dongle_conf():
     # By Kirale convention, interior MAC address is obtained from the dongle
     # serial
     serial = db.get('dongle_serial').split('+')[-1]
-    interior_mac = ':'.join([
-        serial[0:2], serial[2:4], serial[4:6], serial[10:12], serial[12:14],
-        serial[14:16]
-    ])
+    interior_mac = ':'.join(
+        [
+            serial[0:2],
+            serial[2:4],
+            serial[4:6],
+            serial[10:12],
+            serial[12:14],
+            serial[14:16],
+        ]
+    )
     db.set('interior_mac', interior_mac)
     # Also dongle MAC is related to interior MAC
     dongle_mac = bytearray.fromhex(interior_mac.replace(':', ''))
@@ -190,15 +193,13 @@ def dongle_conf():
         db.set('interior_ifname', links[0].get_attr('IFLA_IFNAME'))
         db.set('interior_ifnumber', links[0]['index'])
     else:
-        raise Exception('Error: Device not found with MAC ' +
-                        db.get('interior_mac'))
+        raise Exception('Error: Device not found with MAC ' + db.get('interior_mac'))
 
     # Use last 32 bits of interior MAC as bridging mark
-    db.set('bridging_mark',
-           int(db.get('interior_mac').replace(':', '')[-8:], 16))
+    db.set('bridging_mark', int(db.get('interior_mac').replace(':', '')[-8:], 16))
     db.set('bridging_table', db.get('interior_mac'))
     # This is only useful when more than one interior interface is used
-    #db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
+    # db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
 
 
 def _get_rt_tables():
@@ -227,8 +228,7 @@ def _ifup():
     logging.info('Forwarding has been enabled.')
 
     # Disable duplicate address detection for the interior interface
-    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' %
-         db.get('interior_ifname'))
+    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' % db.get('interior_ifname'))
     logging.info('DAD has been disabled for %s.', db.get('interior_ifname'))
 
     # Enable a bigger number of multicast groups
@@ -242,11 +242,17 @@ def _ifup():
     IPR.link('set', index=idx, state='up', txqlen=5000)
 
     # Add inside IPv6 addresses
-    logging.info('Configuring interior interface %s with address %s.',
-                 db.get('interior_ifname'), db.get('dongle_rloc'))
+    logging.info(
+        'Configuring interior interface %s with address %s.',
+        db.get('interior_ifname'),
+        db.get('dongle_rloc'),
+    )
     IPR.addr('add', index=idx, address=db.get('dongle_rloc'), prefixlen=64)
-    logging.info('Configuring interior interface %s with address %s.',
-                 db.get('interior_ifname'), db.get('dongle_mleid'))
+    logging.info(
+        'Configuring interior interface %s with address %s.',
+        db.get('interior_ifname'),
+        db.get('dongle_mleid'),
+    )
     IPR.addr('add', index=idx, address=db.get('dongle_mleid'), prefixlen=64)
 
     # Add dongle neighbour
@@ -256,21 +262,24 @@ def _ifup():
         dst=db.get('dongle_ll'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
-        nud='permanent')
+        nud='permanent',
+    )
     IPR.neigh(
         'replace',
         family=socket.AF_INET6,
         dst=db.get('dongle_rloc'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
-        nud='permanent')
+        nud='permanent',
+    )
     IPR.neigh(
         'replace',
         family=socket.AF_INET6,
         dst=db.get('dongle_mleid'),
         lladdr=db.get('dongle_mac'),
         ifindex=idx,
-        nud='permanent')
+        nud='permanent',
+    )
 
     # Add custom routing table
     rt_tables = _get_rt_tables()
@@ -279,7 +288,8 @@ def _ifup():
 
     # Add default route to custom table
     IPR.route(
-        'replace', family=socket.AF_INET6, dst='default', table=BR_TABLE_NR, oif=idx)
+        'replace', family=socket.AF_INET6, dst='default', table=BR_TABLE_NR, oif=idx
+    )
 
     rules = IPR.get_rules(family=socket.AF_INET6)
 
@@ -291,7 +301,8 @@ def _ifup():
             family=socket.AF_INET6,
             table=BR_TABLE_NR,
             priority=100,
-            fwmark=int(db.get('bridging_mark')))
+            fwmark=int(db.get('bridging_mark')),
+        )
 
     # Set priority of local table lower than custom table's
     for rule in rules:
@@ -300,27 +311,41 @@ def _ifup():
                 'delete',
                 family=socket.AF_INET6,
                 table=rule.get('table'),
-                priority=rule.get_attr('FRA_PRIORITY') or 0)
-    IPR.rule(
-        'add', family=socket.AF_INET6, table=rt_tables.get('local'), priority=1000)
+                priority=rule.get_attr('FRA_PRIORITY') or 0,
+            )
+    IPR.rule('add', family=socket.AF_INET6, table=rt_tables.get('local'), priority=1000)
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
     # air)
-    logging.info('Traffic rate limit established to %s on interface %s.',
-                 '125 kbps', db.get('interior_ifname'))
-    bash('tc qdisc add dev ' + db.get('interior_ifname') +
-         ' root handle 1: cbq avpkt 1000 bandwidth 12mbit')
-    bash('tc class add dev ' + db.get('interior_ifname') +
-         ' parent 1: classid 1:1 cbq rate 125kbit ' +
-         'allot 1500 prio 5 bounded isolated')
-    bash('tc filter add dev ' + db.get('interior_ifname') +
-         ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1')
+    logging.info(
+        'Traffic rate limit established to %s on interface %s.',
+        '125 kbps',
+        db.get('interior_ifname'),
+    )
+    bash(
+        'tc qdisc add dev '
+        + db.get('interior_ifname')
+        + ' root handle 1: cbq avpkt 1000 bandwidth 12mbit'
+    )
+    bash(
+        'tc class add dev '
+        + db.get('interior_ifname')
+        + ' parent 1: classid 1:1 cbq rate 125kbit '
+        + 'allot 1500 prio 5 bounded isolated'
+    )
+    bash(
+        'tc filter add dev '
+        + db.get('interior_ifname')
+        + ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1'
+    )
 
 
 def _ifdown():
     # Remove custom routing table
-    db.del_from_file('/etc/iproute2/rt_tables',
-                     '\n%s\t%s\n' % (BR_TABLE_NR, db.get('bridging_table')),
-                     '')
+    db.del_from_file(
+        '/etc/iproute2/rt_tables',
+        '\n%s\t%s\n' % (BR_TABLE_NR, db.get('bridging_table')),
+        '',
+    )
 
     # Don't continue if the interface is already down
     idx = IPR.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
@@ -338,7 +363,8 @@ def _ifdown():
         family=socket.AF_INET6,
         table=BR_TABLE_NR,
         priority=100,
-        fwmark=int(db.get('bridging_mark')))
+        fwmark=int(db.get('bridging_mark')),
+    )
 
     # Bring interior interface down
     logging.info('Bringing %s interface down.', db.get('interior_ifname'))
@@ -351,8 +377,9 @@ def dongle_route_enable(prefix):
             'replace',
             family=socket.AF_INET6,
             dst=prefix,
-            oif=db.get('interior_ifnumber'))
-        #bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
+            oif=db.get('interior_ifnumber'),
+        )
+        # bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
     except:
         logging.warning('Route for %s could not be enabled' % prefix)
 
@@ -360,11 +387,9 @@ def dongle_route_enable(prefix):
 def dongle_route_disable(prefix):
     try:
         IPR.route(
-            'del',
-            family=socket.AF_INET6,
-            dst=prefix,
-            oif=db.get('interior_ifnumber'))
-        #bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
+            'del', family=socket.AF_INET6, dst=prefix, oif=db.get('interior_ifnumber')
+        )
+        # bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
     except:
         logging.warning('Route for %s could not be disabled' % prefix)
 
@@ -375,12 +400,16 @@ class NETWORK(Ktask):
             self,
             name='network',
             start_keys=[
-                'bridging_mark', 'bridging_table', 'interior_ifname',
-                'dongle_rloc', 'interior_mac'
+                'bridging_mark',
+                'bridging_table',
+                'interior_ifname',
+                'dongle_rloc',
+                'interior_mac',
             ],
             start_tasks=['serial'],  # To obtain the latest dongle_rloc
             stop_tasks=['diags', 'coapserver'],
-            period=2)
+            period=2,
+        )
 
     def kstart(self):
         _ifup()
@@ -395,7 +424,8 @@ class NETWORK(Ktask):
     async def periodic(self):
         try:
             interior_link_up = IPR.link_lookup(
-                ifname=db.get('interior_ifname'), operstate='UP')
+                ifname=db.get('interior_ifname'), operstate='UP'
+            )
         except:
             interior_link_up = False
         if not interior_link_up:

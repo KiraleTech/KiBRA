@@ -1,4 +1,5 @@
 import logging
+
 from bash import bash as alexcouperbash
 from colorama import Fore
 from colorama import init as colinit
@@ -6,6 +7,7 @@ from colorama import init as colinit
 DEBUG = True
 
 # TODO: https://docs.python.org/3/library/asyncio-subprocess.html
+
 
 def bash(command):
     if DEBUG:

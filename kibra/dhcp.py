@@ -1,9 +1,8 @@
 from struct import pack
 from time import sleep
 
-import kitools
-
 import kibra.database as db
+import kitools
 from kibra.ktask import Ktask
 from kibra.shell import bash
 
@@ -25,12 +24,11 @@ class DHCP(Ktask):
         Ktask.__init__(
             self,
             name='dhcp',
-            start_keys=[
-                'prefix', 'interior_ifname', 'dongle_rloc', 'interior_mac'
-            ],
+            start_keys=['prefix', 'interior_ifname', 'dongle_rloc', 'interior_mac'],
             stop_keys=['interior_ifname'],
             start_tasks=['network', 'serial'],
-            period=2)
+            period=2,
+        )
 
     def kstart(self):
         # Don't start if DHCP is not to be used
@@ -40,8 +38,7 @@ class DHCP(Ktask):
         # Stop DHCP daemon
         bash(DHCP_DAEMON + ' stop')
         # Remove previous configuration for this dongle
-        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'),
-                         '\n}\n')
+        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
         # Add new configuration
         with open(DHCP_CONFIG, 'w') as file_:
             file_.write('\n')
@@ -67,7 +64,6 @@ class DHCP(Ktask):
 
         # TODO: assign DHCP ALOC
 
-
     def kstop(self):
         # Don't stop if DHCP is not to be used
         if not db.get('prefix_dhcp'):
@@ -76,8 +72,7 @@ class DHCP(Ktask):
         # Stop DHCP daemon
         bash(DHCP_DAEMON + ' stop')
         # Remove previous configuration for this dongle
-        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'),
-                         '\n}\n')
+        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
         # Allow for the file to be stored
         sleep(0.2)
 

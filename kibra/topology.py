@@ -16,8 +16,7 @@ def _get_devices(br_serial):
     devices = kiserial.find_devices()
     for dev in devices:
         if not dev.snum in br_serial:
-            dongles.append(
-                kiserial.KiSerial(dev.port, debug=kiserial.KiDebug(1)))
+            dongles.append(kiserial.KiSerial(dev.port, debug=kiserial.KiDebug(1)))
     logging.info('%d devices found' % len(dongles))
     return brouter, dongles
 
@@ -28,6 +27,7 @@ def _str2bin(s):
 
 def _get_atimestamp(auth=False):
     from time import time
+
     epoch = time()
     seconds = _str2bin(int(epoch)).zfill(48)
     ticks = _str2bin(int((epoch - int(epoch)) * 32768)).zfill(15)
@@ -73,7 +73,7 @@ def _join_network(dev, role, oobcom):
         dev.ksh_cmd('clear')
         dev.wait_for('status', ['none'], 5)
     dev.ksh_cmd('config outband')
-    #dev.ksh_cmd('config thver 3')
+    # dev.ksh_cmd('config thver 3')
     for key, param in oobcom.items():
         dev.ksh_cmd('config %s %s' % (key, param))
     if role == 'sed':
@@ -104,8 +104,7 @@ def form_topology():
             mac = device.ksh_cmd('show eui64', True)[0]
             device.set_mac(mac)
             # oobcom['actstamp'] = _get_atimestamp()
-            threads.append(
-                Thread(target=_join_network, args=[device, 'fed', oobcom]))
+            threads.append(Thread(target=_join_network, args=[device, 'fed', oobcom]))
     for thread in threads:
         thread.start()
     for thread in threads:

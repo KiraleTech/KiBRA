@@ -1,7 +1,7 @@
 import random
 
 
-class TLV():
+class TLV:
     M_SOURCE_ADDRESS = 0
     M_MODE = 1
     M_TIMEOUT = 2
@@ -156,7 +156,7 @@ class TLV():
     D_TYPE_LIST = 18
 
 
-class URI():
+class URI:
     D_DG = '/d/dg'
     C_AG = '/c/ag'
     N_MR = '/n/mr'
@@ -174,7 +174,7 @@ class URI():
         return (splitted[1], splitted[2])
 
 
-class DEFS():
+class DEFS:
     PORT_COAP = 5683
     PORT_MC = 49191
     PORT_MM = 61631

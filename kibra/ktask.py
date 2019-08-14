@@ -1,6 +1,6 @@
 import abc
-import logging
 import asyncio
+import logging
 
 import kibra.database as db
 
@@ -20,16 +20,12 @@ class action:
     KILL = 'kill'
 
 
-class Ktask():
+class Ktask:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,
-                 name,
-                 start_keys=[],
-                 stop_keys=[],
-                 start_tasks=[],
-                 stop_tasks=[],
-                 period=2):
+    def __init__(
+        self, name, start_keys=[], stop_keys=[], start_tasks=[], stop_tasks=[], period=2
+    ):
         super(Ktask, self).__init__()
         self.name = name
         self.status_key = 'status_' + name
@@ -86,8 +82,9 @@ class Ktask():
                     db.set(self.status_key, status.STARTING)
                     # Wait for tasks
                     for task in self.start_tasks:
-                        logging.info('Task [%s] is waiting for [%s] to start.',
-                                     self.name, task)
+                        logging.info(
+                            'Task [%s] is waiting for [%s] to start.', self.name, task
+                        )
                         while db.get('status_' + task) is not status.RUNNING:
                             await asyncio.sleep(1)
                     # Wait for keys
@@ -99,8 +96,7 @@ class Ktask():
                         logging.info('Task [%s] has now started.', self.name)
                     except Exception as exc:
                         db.set(self.status_key, status.ERRORED)
-                        logging.error('Task [%s] errored on start: %s',
-                                      self.name, exc)
+                        logging.error('Task [%s] errored on start: %s', self.name, exc)
                     db.set(self.action_key, action.NONE)
                 elif task_action is action.KILL:
                     self.is_alive = False
@@ -110,8 +106,10 @@ class Ktask():
                 for task in self.start_tasks:
                     if db.get('status_' + task) is not status.RUNNING:
                         logging.info(
-                            'Task [%s] stopped and forced [%s] to stop.', task,
-                            self.name)
+                            'Task [%s] stopped and forced [%s] to stop.',
+                            task,
+                            self.name,
+                        )
                         self.kill()
                         break
                 # Periodic tasks
@@ -122,10 +120,10 @@ class Ktask():
             if task_status is status.STOPPING:
                 if task_action in (action.STOP, action.KILL):
                     for task in self.stop_tasks:
-                        logging.info('Task [%s] is waiting for [%s] to stop.',
-                                     self.name, task)
-                        while db.get('status_' + task) is not (status.STOPPED
-                                                               or None):
+                        logging.info(
+                            'Task [%s] is waiting for [%s] to stop.', self.name, task
+                        )
+                        while db.get('status_' + task) is not (status.STOPPED or None):
                             await asyncio.sleep(1)
                     while not db.has_keys(self.stop_keys):
                         logging.info('Task [%s] cannot be stopped' % self.name)
