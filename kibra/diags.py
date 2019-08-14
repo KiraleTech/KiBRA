@@ -323,7 +323,8 @@ class DIAGS(Ktask):
                                     db.set('dhcp_aloc', aloc)
                                     # Listen to the DHCP ALOC which is going to be
                                     # used by BR MTD children
-                                    netmap(aloc, rloc)
+                                    NETWORK.add_addr(aloc, db.get('interior_ifnumber'))
+                                    #netmap(aloc, rloc)
 
         if is_pbbr:
             if 'primary' not in db.get('bbr_status'):

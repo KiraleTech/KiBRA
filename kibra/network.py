@@ -120,6 +120,10 @@ def get_eui64(ifnumber):
     return ':'.join(octets[0:3] + ['ff', 'fe'] + octets[3:6])
 
 
+def add_addr(address, ifnumber):
+    '''Used externally to add an address to an interface'''
+    IPR.addr('add', index=ifnumber, address=address, prefixlen=64)
+
 def get_addrs(ifname, family, scope=None):
     '''Get an address for the interface'''
     # Find configured addresses

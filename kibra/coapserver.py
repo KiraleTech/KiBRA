@@ -810,6 +810,7 @@ class COAPSERVER(Ktask):
                 addr=db.get('dongle_ll'),
                 port=DEFS.PORT_MM,
                 resources=[
+                    (URI.tuple(URI.N_DR), Res_N_DR()), # Only for own MTD children
                     (URI.tuple(URI.N_MR), Res_N_MR()),
                     (URI.tuple(URI.A_AE), Res_A_AE()),
                 ],
