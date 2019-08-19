@@ -301,7 +301,8 @@ class DUAHandler:
             # Just update its timestamp
             old_entry.update(elapsed)
             # Keep other BBRs updated
-            self.announce(entry)
+            if not old_entry.dad:
+                self.announce(entry)
         else:
             # New entry
             new_entry = DUAEntry(eid, dua)
