@@ -39,7 +39,8 @@ ND_NEIGHBOR_ADVERTISEMENT = 136
 NS_FMT = '!BBHI16s'  # type, code, cksum, flags, ns_target
 OPT_FMT = '!BB%ss'
 
-EXT_IPV6_ADDRS = []
+EXT_IFNUMBER = None
+EXT_EUI48 = None
 
 
 def icmp6_filter_setpass(filter_, type_):
@@ -63,8 +64,14 @@ def checksum(msg):
 
 class NDProxy:
     def __init__(self):
+        global EXT_IFNUMBER, EXT_EUI48
+
         # List of PBBR DUAs with finished DAD
         self.duas = {}
+
+        # Set exterior interface attributes
+        EXT_IFNUMBER = db.get('exterior_ifnumber')
+        EXT_EUI48 = bytes.fromhex(NETWORK.get_eui48(EXT_IFNUMBER).replace(':', ''))
 
         try:
             # Create and init the ICMPv6 socket
@@ -102,10 +109,22 @@ class NDProxy:
 
     def run_daemon(self):
         ext_ifname = db.get('exterior_ifname')
+        
+        # TODO: this takes around 40 ms, too much to be executed for every received NS,
+        # but we still want to generate NA for all the exterior IPv6 addresses.
+        # May be problematic if new addresses are added after start
+        ext_ipv6_addrs = []
+        while not ext_ipv6_addrs:
+            try:
+                ext_ipv6_addrs = NETWORK.get_addrs(ext_ifname, socket.AF_INET6)
+            except:
+                # pyroute2.netlink.exceptions.NetlinkError:
+                #  (16, 'Device or resource busy')
+                time.sleep(0.2)
+
         while self.ndp_on:
             # Wait for some multicast traffic to arrive
             data, src = self.icmp6_sock.recvfrom(1280)
-            # print('%s | %d: %s' % (src[0], len(data), data.hex()))
 
             # Accepting Neighbor solicit only
             if data[0] != ND_NEIGHBOR_SOLICIT:
@@ -119,15 +138,11 @@ class NDProxy:
             logging.info('in ns from %s for %s' % (src[0], ns_tgt))
 
             # Generate Neighbor Advertisement
-            try:
-                EXT_IPV6_ADDRS = NETWORK.get_addrs(ext_ifname, socket.AF_INET6)
-            except:
-                # pyroute2.netlink.exceptions.NetlinkError:
-                #  (16, 'Device or resource busy')
-                pass
-            addrs = list(self.duas.keys()) + EXT_IPV6_ADDRS
-            if ns_tgt in addrs:
+            if ns_tgt in ext_ipv6_addrs:
                 self.send_na(src[0], ns_tgt)
+            elif ns_tgt in list(self.duas.keys()):
+                # TODO: no delay if DUA appears in the EID-to-RLOC Map Cache
+                self.send_na(src[0], ns_tgt, delayed=True)
 
     def add_del_dua(self, action, dua, reg_time=0, ifnumber=None):
         if not 'primary' in db.get('bbr_status'):
@@ -169,16 +184,13 @@ class NDProxy:
             except:
                 logging.warning('Unable to remove unknown DUA %s' % dua)
 
-    def send_na(self, dst, tgt, solicited=True):
+    def send_na(self, dst, tgt, solicited=True, delayed=False):
         R = 31
         S = 30
         O = 29
         flags = 0
 
         if solicited:
-            # await asyncio.sleep(delay/1000)
-            time.sleep(random.randint(64, 128) / 1000)
-            # TODO: no sleep if DUA appears in the EID-to-RLOC Map Cache
             flags |= 1 << S
         else:
             # Set Override flag if registration was recent
@@ -194,10 +206,7 @@ class NDProxy:
         header = struct.pack(NS_FMT, ND_NEIGHBOR_ADVERTISEMENT, 0, 0, flags, tgt_bytes)
 
         # Set Target Link-Layer Address option
-        idx = db.get('exterior_ifnumber')
-        eui48 = NETWORK.get_eui48(idx)
-        eui48 = bytes.fromhex(eui48.replace(':', ''))
-        opts = struct.pack(OPT_FMT % len(eui48), 2, math.ceil(len(eui48) / 8), eui48)
+        opts = struct.pack(OPT_FMT % len(EXT_EUI48), 2, math.ceil(len(EXT_EUI48) / 8), EXT_EUI48)
 
         # Set the checksum
         cksum = checksum(header + opts)
@@ -205,9 +214,14 @@ class NDProxy:
             NS_FMT, ND_NEIGHBOR_ADVERTISEMENT, 0, cksum, flags, tgt_bytes
         )
 
+        # Apply delay if requested
+        if delayed:
+            delay = random.randint(64, 128) / 1000
+            time.sleep(delay)
+
         # Send ICMPv6 packet
         try:
-            self.icmp6_sock.sendto(header + opts, (dst, 0, 0, idx))
+            self.icmp6_sock.sendto(header + opts, (dst, 0, 0, EXT_IFNUMBER))
         except Exception as exc:
             logging.warn('Cannot send NA to %s. Error: %s' % (dst, exc))
 
