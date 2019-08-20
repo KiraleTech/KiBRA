@@ -248,7 +248,15 @@ class Res_N_MR(resource.Resource):
                 timeout_tlv = ThreadTLV(
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout)
                 )
-                payload = ipv6_addressses_tlv.array() + timeout_tlv.array()
+                net_name = db.get('dongle_netname').encode()
+                network_name_tlv = ThreadTLV(
+                    t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name
+                )
+                payload = (
+                    ipv6_addressses_tlv.array()
+                    + timeout_tlv.array()
+                    + network_name_tlv.array()
+                )
                 dst = '%s%%%s' % (db.get('all_network_bbrs'), db.get('exterior_ifname'))
                 await MCAST_HNDLR.coap_client.non_request(
                     dst, DEFS.PORT_BB, URI.B_BMR, payload
@@ -544,6 +552,13 @@ class Res_B_BMR(resource.Resource):
         # Timeout TLV
         timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
 
+        # Network Name TLV
+        netowrk_name = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
+
+        # Don't process BMLR.ntf messages from other networks
+        if netowrk_name and netowrk_name != db.get('dongle_netname').encode():
+            return COAP_NO_RESPONSE
+
         # Register valid addresses
         if addrs and timeout:
             MCAST_HNDLR.reg_update(addrs, timeout)
@@ -811,7 +826,7 @@ class COAPSERVER(Ktask):
                 addr=db.get('dongle_ll'),
                 port=DEFS.PORT_MM,
                 resources=[
-                    (URI.tuple(URI.N_DR), Res_N_DR()), # Only for own MTD children
+                    (URI.tuple(URI.N_DR), Res_N_DR()),  # Only for own MTD children
                     (URI.tuple(URI.N_MR), Res_N_MR()),
                     (URI.tuple(URI.A_AE), Res_A_AE()),
                 ],
