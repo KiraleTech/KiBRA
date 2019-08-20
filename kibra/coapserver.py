@@ -31,8 +31,9 @@ MCAST_HNDLR = None
 
 COAP_NO_RESPONSE = None
 
-# Limit the number of DUA registrations managed by this BBR
+# Limit the number of DUA and Multicast registrations managed by this BBR
 DUA_LIMIT = 768
+MULTICAST_LIMIT = 768
 
 
 class CoapServer:
@@ -212,6 +213,8 @@ class Res_N_MR(resource.Resource):
         # BBR Primary/Secondary status
         if not 'primary' in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
+        elif len(MCAST_HNDLR.maddrs) >= MULTICAST_LIMIT:
+            status = DMStatus.ST_RES_SHRT
         else:
             timeout = None
             comm_sid = None
