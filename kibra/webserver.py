@@ -15,9 +15,9 @@ import xml.etree.ElementTree
 import kibra
 import kibra.coapserver as coap_server
 import kibra.database as db
+import kibra.network as NETWORK
 from kibra.diags import DIAGS_DB
 from kibra.ksh import bbr_dataset_update, send_cmd
-from kibra.network import set_ext_iface
 from kibra.shell import bash
 
 BBR_HDP_ADDR = ('ff02::114', 12345)
@@ -158,7 +158,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     bash('service radvd stop')
                 elif backhaul and domain:
                     if not db.get('exterior_ifname'):
-                        set_ext_iface()
+                        NETWORK.set_ext_iface()
                     with open('/etc/radvd.conf', 'w') as file_:
                         file_.write('interface %s {\n' % db.get('exterior_ifname'))
                         file_.write('  AdvSendAdvert on;\n')
@@ -182,6 +182,9 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/coap'):
                 db.set('coap_req', req)
+                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/flushneigh'):
+                NETWORK.flush_neighbors()
                 data = 'OK'
             else:
                 self.send_response(http.HTTPStatus.NOT_FOUND)
