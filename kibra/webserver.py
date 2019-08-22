@@ -77,6 +77,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
             req = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
 
             # Different actions
+            data = 'OK'
             if self.path == '/logs':
                 # TODO: fancy colourfull autorefresh logs page
                 with open(db.LOG_FILE, 'r') as file_:
@@ -114,7 +115,6 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 # Special actions
                 if not set(['mlr_timeout', 'rereg_delay']).isdisjoint(modif_keys):
                     bbr_dataset_update()
-                data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/ksh'):
                 cmd = req.get('c', None)
                 if cmd:
@@ -172,20 +172,15 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     bash('service radvd restart')
                 else:
                     return
-                data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/mdnsqry'):
                 bash('dig -p 5353 @ff02::fb _meshcop._udp.local ptr')
-                data = 'OK'
             elif kibra.__harness__ and self.path.startswith('/duastatus'):
                 db.set('dua_next_status', req.get('sta')[0])
                 db.set('dua_next_status_eid', req.get('eid')[0])
-                data = 'OK'
-            elif kibra.__harness__ and self.path.startswith('/coap'):
-                db.set('coap_req', req)
-                data = 'OK'
+            elif kibra.__harness__ and self.path.startswith('/sendudp'):
+                NETWORK.send_udp(req.get('dst'), req.get('prt'), req.get('pld'))
             elif kibra.__harness__ and self.path.startswith('/flushneigh'):
                 NETWORK.flush_neighbors()
-                data = 'OK'
             else:
                 self.send_response(http.HTTPStatus.NOT_FOUND)
                 return

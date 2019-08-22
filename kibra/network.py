@@ -21,6 +21,16 @@ IFF_LOOPBACK = 0x8
 IFF_MULTICAST = 0x1000
 
 
+def send_udp(host, port, payload=''):
+    '''TH: Send IPv6 UDP datagram to the exterior interface'''
+    IPPROTO_IPV6 = 41
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+    iface = struct.pack('I', int(db.get('exterior_ifnumber')))
+    sock.setsockopt(IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, iface)
+    sock.sendto(bytes.fromhex(payload), (host, port))
+    sock.close()
+
+
 def internet_access(host='1.1.1.1', port=53, timeout=0.7):
     try:
         socket.setdefaulttimeout(timeout)
@@ -124,6 +134,7 @@ def add_addr(address, ifnumber):
     '''Used externally to add an address to an interface'''
     IPR.addr('add', index=ifnumber, address=address, prefixlen=64)
 
+
 def get_addrs(ifname, family, scope=None):
     '''Get an address for the interface'''
     # Find configured addresses
@@ -220,9 +231,11 @@ def _rt_add_table(name, number):
     with open('/etc/iproute2/rt_tables', 'a') as file_:
         file_.write('\n%s\t%s\n' % (number, name))
 
+
 def flush_neighbors():
     bash('ip -6 neighbor flush all')
     logging.info('All IPv6 neighbors have been removed.')
+
 
 def _ifup():
     # For the Thread Harness, remove old neighbors

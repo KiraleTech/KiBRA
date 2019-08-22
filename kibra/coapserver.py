@@ -905,19 +905,3 @@ class COAPSERVER(Ktask):
 
     async def periodic(self):
         MCAST_HNDLR.reg_periodic()
-
-        if kibra.__harness__:
-            coap_con_request()
-
-
-def coap_con_request():
-    req_str = db.get('coap_req')
-    if req_str:
-        db.set('coap_req', '')
-        req = json.loads(req_str.replace("'", '"'))
-        dst = req.get('dst')[0]
-        prt = int(req.get('prt')[0])
-        uri = req.get('uri')[0]
-        pld = bytes.fromhex(req.get('pld')[0])
-        logging.info('out %s ntf: %s' % (uri, ThreadTLV.sub_tlvs_str(pld)))
-        asyncio.ensure_future(DUA_HNDLR.coap_client.con_request(dst, prt, uri, pld))

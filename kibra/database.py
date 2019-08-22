@@ -46,7 +46,6 @@ DB_ITEMS = {
     'bbr_status': [str, None, lambda x: True, False, False],
     'bridging_mark': [int, None, lambda x: True, False, False],
     'bridging_table': [str, None, lambda x: True, False, False],
-    'coap_req': [str, '', lambda x: True, False, False],
     'dhcp_aloc': [str, None, lambda x: True, False, False],
     'dua_next_status': [str, '', lambda x: True, False, False],  # Thread Harness
     'dua_next_status_eid': [str, '', lambda x: True, False, False],  # Thread Harness
