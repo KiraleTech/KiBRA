@@ -105,6 +105,10 @@ def enable_ncp():
     else:
         logging.info('NCP firmware is up to date.')
 
+        # Make sure we are running Thread v3 (1.2.0)
+        if not kibra.__kinosver__:
+            send_cmd('config thver 3')
+
         # Enable ECM if not enabled
         if 'off' in send_cmd('show hwconfig')[3]:
             logging.info('Enabling CDC Ethernet and reseting device.')
