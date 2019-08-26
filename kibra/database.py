@@ -66,7 +66,6 @@ DB_ITEMS = {
     'dongle_role': [str, 'leader', lambda x: True, True, False],
     'dongle_serial': [str, None, lambda x: True, False, True],
     'dongle_secpol': [str, None, lambda x: True, False, False],
-    'dongle_sjitter': [str, '120', lambda x: True, True, True],
     'dongle_status': [str, None, lambda x: True, False, False],
     'dongle_xpanid': [str, None, lambda x: True, True, False],
     'exterior_ifname': [str, None, lambda x: True, False, False],

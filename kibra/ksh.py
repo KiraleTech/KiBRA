@@ -130,8 +130,6 @@ def _dongle_apply_config():
         send_cmd('config xpanid %s' % db.get('dongle_xpanid'))
     if 'dongle_netkey' in db.CFG:
         send_cmd('config mkey %s' % db.get('dongle_netkey'))
-    if 'dongle_sjitter' in db.CFG:
-        send_cmd('config sjitter %s' % db.get('dongle_sjitter'))
     if 'dongle_prefix' in db.CFG:
         send_cmd('config mlprefix %s' % db.get('dongle_prefix'))
     if 'dongle_channel' in db.CFG:
