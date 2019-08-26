@@ -131,7 +131,7 @@ def _dongle_apply_config():
     if 'dongle_netkey' in db.CFG:
         send_cmd('config mkey %s' % db.get('dongle_netkey'))
     if 'dongle_prefix' in db.CFG:
-        send_cmd('config mlprefix %s' % db.get('dongle_prefix').split('/')[0]))
+        send_cmd('config mlprefix %s' % db.get('dongle_prefix').split('/')[0])
     if 'dongle_channel' in db.CFG:
         logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
         send_cmd('config channel %s' % db.get('dongle_channel'))

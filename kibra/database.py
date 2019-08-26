@@ -172,7 +172,12 @@ def load():
         if os.path.isfile(CFG_FILE):
             logging.debug('Loading configuration file %s', CFG_FILE)
             with open(CFG_FILE, 'r') as json_db:
-                CFG = json.load(json_db)
+                try:
+                    CFG = json.load(json_db)
+                except json.decoder.JSONDecodeError:
+                    logging.error(
+                        'Configuration file syntax error, using default configuration.'
+                    )
             CFG_USER = CFG.copy()
         else:
             logging.debug('Using default configuration.')
