@@ -23,11 +23,12 @@ IFF_MULTICAST = 0x1000
 
 def send_udp(host, port, payload=''):
     '''TH: Send IPv6 UDP datagram to the exterior interface'''
+    logging.info('Sending UDP: [%s]:%s %s' % (host, port, payload))
     IPPROTO_IPV6 = 41
     sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     iface = struct.pack('I', int(db.get('exterior_ifnumber')))
     sock.setsockopt(IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, iface)
-    sock.sendto(bytes.fromhex(payload), (host, port))
+    sock.sendto(bytes.fromhex(payload), (host, int(port)))
     sock.close()
 
 
