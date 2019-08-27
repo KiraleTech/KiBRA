@@ -115,7 +115,11 @@ class MCRouter:
     def run_daemon(self):
         while self.mcr_on:
             # Wait for some multicast traffic to arrive
-            data = self.mc6r_sock.recv(1280)
+            try:
+                data = self.mc6r_sock.recv(1280)
+            except:
+                # socket.timeout: timed out
+                time.sleep(0.2)
 
             if not 'primary' in db.get('bbr_status'):
                 continue
