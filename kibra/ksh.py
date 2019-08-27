@@ -319,7 +319,7 @@ def prefix_handle(
         flags |= 1 << 9
     if nd_dns:
         flags |= 1 << 7
-    if dp and not slaac:
+    if dp:
         flags |= 1 << 6
     if preference == 'high':
         flags |= 1 << 14
@@ -343,6 +343,22 @@ def _bagent_off():
     logging.info('Border agent has been disabled.')
 
 
+def _get_prefix_flags():
+    slaac = True if db.get('prefix_slaac') else False
+    dhcp = True if db.get('prefix_dhcp') else False
+    dp = True if db.get('prefix_dua') else False
+
+    # Force SLAAC if no other flags are set
+    if not dp and not dhcp:
+        slaac = True
+    
+    # DHCP overrides SLAAC
+    if dhcp:
+        slaac = False
+    
+    return slaac, dhcp, dp
+
+
 class SERIAL(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -363,9 +379,7 @@ class SERIAL(Ktask):
     def kstop(self):
         if db.get('prefix_active'):
             # Remove prefix from the network
-            dp = True if db.get('prefix_dua') else False
-            dhcp = True if db.get('prefix_dhcp') else False
-            slaac = True if not dp and not dhcp else False
+            slaac, dhcp, dp = _get_prefix_flags()
 
             prefix_handle(
                 'prefix',
@@ -395,9 +409,7 @@ class SERIAL(Ktask):
             self.kill()
 
         if not db.get('prefix_active'):
-            dp = True if db.get('prefix_dua') else False
-            dhcp = True if db.get('prefix_dhcp') else False
-            slaac = True if not dp and not dhcp else False
+            slaac, dhcp, dp = _get_prefix_flags()
 
             # Don't continue if servers are not running
             if dhcp and db.get('status_dhcp') not in 'running':

@@ -103,6 +103,7 @@ DB_ITEMS = {
     'prefix_active': [int, 0, lambda x: True, True, True],
     'prefix_dhcp': [int, 0, lambda x: True, True, True],
     'prefix_dua': [int, 0, lambda x: True, True, True],
+    'prefix_slaac': [int, 1, lambda x: True, True, True],
     'rereg_delay': [
         int,
         DEFS.BBR_DEF_REREG_DELAY,
