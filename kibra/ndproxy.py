@@ -124,7 +124,11 @@ class NDProxy:
 
         while self.ndp_on:
             # Wait for some multicast traffic to arrive
-            data, src = self.icmp6_sock.recvfrom(1280)
+            try:
+                data, src = self.icmp6_sock.recvfrom(1280)
+            except:
+                # socket.timeout: timed out
+                time.sleep(0.2)
 
             # Accepting Neighbor solicit only
             if data[0] != ND_NEIGHBOR_SOLICIT:
