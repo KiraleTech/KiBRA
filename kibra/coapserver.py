@@ -598,7 +598,34 @@ class Res_B_BQ(resource.Resource):
         return COAP_NO_RESPONSE
 
 
-class Res_B_BA(resource.Resource):
+def _get_b_ba_params(payload):
+    '''Extract paramters from a BB.ans or PRO_BB.ntf payload'''
+    dua = None
+    eid = None
+    rloc16 = None
+    elapsed = None
+    net_name = None
+    value = ThreadTLV.get_value(payload, TLV.A_TARGET_EID)
+    if value:
+        dua = ipaddress.IPv6Address(bytes(value)).compressed
+        value = ThreadTLV.get_value(payload, TLV.A_ML_EID)
+    if value:
+        eid = value.hex()
+    value = ThreadTLV.get_value(payload, TLV.A_RLOC16)
+
+    if value:
+        rloc16 = value.hex()
+    value = ThreadTLV.get_value(payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
+    if value:
+        elapsed = struct.unpack('!I', value)[0]
+    value = ThreadTLV.get_value(payload, TLV.A_NETWORK_NAME)
+    if value:
+        net_name = struct.unpack('%ds' % len(value), value)[0].decode()
+
+    return dua, eid, rloc16, elapsed, net_name
+
+
+class Res_B_BA_uni(resource.Resource):
     '''Backbone Answer, Thread 1.2 9.4.8.4.3'''
 
     async def render_post(self, request):
@@ -610,29 +637,10 @@ class Res_B_BA(resource.Resource):
         # Message not handled by Secondary BBR
         if not 'primary' in db.get('bbr_status'):
             return COAP_NO_RESPONSE
-
-        dua = None
-        rloc16 = None
-        eid = None
-        elapsed = None
-        net_name = None
-        value = ThreadTLV.get_value(request.payload, TLV.A_TARGET_EID)
-        if value:
-            dua = ipaddress.IPv6Address(bytes(value)).compressed
-        value = ThreadTLV.get_value(request.payload, TLV.A_RLOC16)
-        if value is not None:
-            rloc16 = value.hex()
-        value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
-        if value:
-            eid = value.hex()
-        value = ThreadTLV.get_value(request.payload, TLV.A_TIME_SINCE_LAST_TRANSACTION)
-        if value:
-            elapsed = struct.unpack('!I', value)[0]
-        value = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
-        if value:
-            net_name = struct.unpack('%ds' % len(value), value)[0].decode()
+            # TODO: 9.4.8.2.9 Caching DUAs Advertised on the Backbone Link
 
         # Check if all required TLVs are present
+        dua, eid, rloc16, elapsed, net_name = _get_b_ba_params(request.payload)
         if None in (dua, eid, elapsed, net_name):
             return COAP_NO_RESPONSE
 
@@ -641,15 +649,17 @@ class Res_B_BA(resource.Resource):
             % (dua, eid, elapsed, net_name, rloc16)
         )
 
-        # See if its response to DAD or ADDR_QRY
+        # See if we have this DUA in our table
+        entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
+
+        # 9.4.8.2.8 Receipt of Backbone Answer BB.ans
         if not rloc16:
-            entry_eid, entry_elapsed, dad = DUA_HNDLR.find_eid(dua)
             if not entry_eid:
                 # Nothing to do for this EID
                 return COAP_NO_RESPONSE
             elif dad is True:
-                if entry_elapsed < elapsed:
-                    # This DUA is still registered somewhere else
+                if entry_eid == eid:
+                    # This DUA is still registered somewhere else, inform others
                     DUA_HNDLR.duplicated_found(dua, delete=False)
                     # Send PRO_BB.ntf
                     asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(dua))
@@ -658,10 +668,6 @@ class Res_B_BA(resource.Resource):
                     DUA_HNDLR.duplicated_found(dua, delete=True)
                     # Send ADDR_ERR.ntf
                     asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
-            else:
-                # This DUA has been registered somewhere else more recently
-                # Remove silently
-                DUA_HNDLR.remove_entry(dua=dua)
         else:
             # Send ADDR_NTF.ans
             bbr_rloc16 = ipaddress.IPv6Address(db.get('dongle_rloc')).packed[-2:]
@@ -678,10 +684,58 @@ class Res_B_BA(resource.Resource):
             )
 
         # ACK
-        if request.mtype == aiocoap.NON:
+        return aiocoap.Message(mtype=Type.ACK, code=Code.CHANGED)
+
+
+class Res_B_BA_multi(resource.Resource):
+    '''Proactive Backbone Notification, Thread 1.2 9.4.8.2.4'''
+
+    async def render_post(self, request):
+        # Incoming TLVs parsing
+        logging.info(
+            'in %s ans: %s' % (URI.B_BA, ThreadTLV.sub_tlvs_str(request.payload))
+        )
+
+        # Message not handled by Secondary BBR
+        if not 'primary' in db.get('bbr_status'):
             return COAP_NO_RESPONSE
+            # TODO: 9.4.8.2.9 Caching DUAs Advertised on the Backbone Link
+
+        # Check if all required TLVs are present
+        dua, eid, _, elapsed, net_name = _get_b_ba_params(request.payload)
+        if None in (dua, eid, elapsed, net_name):
+            return COAP_NO_RESPONSE
+
+        logging.info(
+            'PRO_BB.ntf: DUA=%s, ML-EID=%s, Time=%d, Net Name=%s'
+            % (dua, eid, elapsed, net_name)
+        )
+
+        # Se if we have this DUA in our table
+        entry_eid, entry_elapsed, _ = DUA_HNDLR.find_eid(dua)
+
+        # 9.4.8.2.4 Receipt of Proactive Backbone Notification PRO_BB.ntf Multicast
+        if not entry_eid:
+            # TODO: 9.4.8.2.9 Caching DUAs Advertised on the Backbone Link
+            return COAP_NO_RESPONSE
+        elif entry_eid == eid:
+            if entry_elapsed < elapsed:
+                # This DUA is still registered somewhere else
+                DUA_HNDLR.duplicated_found(dua, delete=False)
+                # Send PRO_BB.ntf
+                asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(dua))
+            else:
+                # This DUA has been registered somewhere else more recently
+                # Remove silently
+                DUA_HNDLR.remove_entry(dua=dua)
         else:
-            return aiocoap.Message(mtype=Type.ACK, code=Code.CHANGED)
+            # Duplication detected during DAD
+            DUA_HNDLR.duplicated_found(dua, delete=True)
+            # Send ADDR_ERR.ntf
+            asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
+
+        # No ACK
+        return COAP_NO_RESPONSE
 
 
 class Res_A_AQ(resource.Resource):
@@ -856,14 +910,14 @@ class COAPSERVER(Ktask):
                 iface=db.get('exterior_ifnumber'),
             )
         )
-        # Bind Res_B_BQ to all_domain_bbrs
+        # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
         self.coap_servers.append(
             CoapServer(
                 addr='%s%%%s' % (db.get('all_domain_bbrs'), db.get('exterior_ifname')),
                 port=db.get('bbr_port'),
                 resources=[
                     (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                    (URI.tuple(URI.B_BA), Res_B_BA()),
+                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
                 ],
                 iface=db.get('exterior_ifnumber'),
             )
@@ -873,7 +927,7 @@ class COAPSERVER(Ktask):
             CoapServer(
                 addr=db.get('exterior_ipv6_ll'),
                 port=db.get('bbr_port'),
-                resources=[(URI.tuple(URI.B_BA), Res_B_BA())],
+                resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
                 iface=db.get('exterior_ifnumber'),
             )
         )
