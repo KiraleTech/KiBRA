@@ -7,6 +7,7 @@ ND Proxy implementation
 import asyncio
 import datetime
 import ipaddress
+import json
 import logging
 import math
 import random
@@ -108,20 +109,6 @@ class NDProxy:
             logging.warn('A problem occured while trying to close ND Proxy socket')
 
     def run_daemon(self):
-        ext_ifname = db.get('exterior_ifname')
-        
-        # TODO: this takes around 40 ms, too much to be executed for every received NS,
-        # but we still want to generate NA for all the exterior IPv6 addresses.
-        # May be problematic if new addresses are added after start
-        ext_ipv6_addrs = []
-        while not ext_ipv6_addrs:
-            try:
-                ext_ipv6_addrs = NETWORK.get_addrs(ext_ifname, socket.AF_INET6)
-            except:
-                # pyroute2.netlink.exceptions.NetlinkError:
-                #  (16, 'Device or resource busy')
-                time.sleep(0.2)
-
         while self.ndp_on:
             # Wait for some multicast traffic to arrive
             try:
@@ -142,7 +129,7 @@ class NDProxy:
             logging.info('in ns from %s for %s' % (src[0], ns_tgt))
 
             # Generate Neighbor Advertisement
-            if ns_tgt in ext_ipv6_addrs:
+            if ns_tgt in json.loads(db.get('exterior_addrs') or '[]'):
                 self.send_na(src[0], ns_tgt)
             elif ns_tgt in list(self.duas.keys()):
                 # TODO: no delay if DUA appears in the EID-to-RLOC Map Cache
@@ -210,7 +197,9 @@ class NDProxy:
         header = struct.pack(NS_FMT, ND_NEIGHBOR_ADVERTISEMENT, 0, 0, flags, tgt_bytes)
 
         # Set Target Link-Layer Address option
-        opts = struct.pack(OPT_FMT % len(EXT_EUI48), 2, math.ceil(len(EXT_EUI48) / 8), EXT_EUI48)
+        opts = struct.pack(
+            OPT_FMT % len(EXT_EUI48), 2, math.ceil(len(EXT_EUI48) / 8), EXT_EUI48
+        )
 
         # Set the checksum
         cksum = checksum(header + opts)

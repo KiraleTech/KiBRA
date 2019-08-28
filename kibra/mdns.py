@@ -12,82 +12,6 @@ MDNS_HOSTS = '/etc/avahi/hosts'
 MDNS_SERVICES = '/etc/avahi/services'
 
 
-def nat_start(action):
-    '''
-    natMdnsStart I -> Insert the rules
-    natMdnsStart D -> Delete the rules
-    '''
-    # TODO: move this method to iptables.py
-
-    # NAT 4 -> 6
-    if db.has_keys(['exterior_ipv4']):
-        if action == 'I':
-            bash(
-                'jool bib add %s#%s %s#%s --udp'
-                % (
-                    db.get('exterior_ipv4'),
-                    str(db.get('exterior_port_mc')),
-                    db.get('dongle_rloc'),
-                    str(db.get('bagent_port')),
-                )
-            )
-        else:
-            bash(
-                'jool bib remove %s#%s %s#%s --udp'
-                % (
-                    db.get('exterior_ipv4'),
-                    str(db.get('exterior_port_mc')),
-                    db.get('dongle_rloc'),
-                    str(db.get('bagent_port')),
-                )
-            )
-        # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
-        bash(
-            'iptables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
-            % (
-                action,
-                db.get('exterior_ifname'),
-                db.get('exterior_ipv4'),
-                db.get('exterior_port_mc'),
-                db.get('bridging_mark'),
-            )
-        )
-    # NAT 6 -> 6
-    if db.has_keys(['exterior_ipv6_ll']):
-        bash(
-            'ip6tables -w -t nat -%s PREROUTING -i %s -d %s -p udp --dport %d -j DNAT --to [%s]:%d'
-            % (
-                action,
-                db.get('exterior_ifname'),
-                db.get('exterior_ipv6_ll'),
-                db.get('exterior_port_mc'),
-                db.get('dongle_rloc'),
-                db.get('bagent_port'),
-            )
-        )
-        bash(
-            'ip6tables -w -t nat -%s POSTROUTING -o %s -s %s -p udp --sport %d -j SNAT --to [%s]:%d'
-            % (
-                action,
-                db.get('exterior_ifname'),
-                db.get('dongle_rloc'),
-                db.get('bagent_port'),
-                db.get('exterior_ipv6_ll'),
-                db.get('exterior_port_mc'),
-            )
-        )
-        bash(
-            'ip6tables -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
-            % (
-                action,
-                db.get('exterior_ifname'),
-                db.get('exterior_ipv6_ll'),
-                db.get('exterior_port_mc'),
-                db.get('bridging_mark'),
-            )
-        )
-
-
 def get_records():
     records = {}
     '''Table 8-5. Border Agent State Bitmap'''
@@ -165,26 +89,17 @@ class MDNS(Ktask):
             start_keys=['exterior_ifname', 'bbr_seq', 'bbr_port'],
             period=2,
         )
-        self.nat_enabled = False
 
     async def periodic(self):
-        if not self.nat_enabled and db.get('status_nat') == 'running':
-            # Enable NAT
-            logging.info('Enabling Border Agent NAT.')
-            self.nat_enabled = True
-            nat_start('I')
-
         self.service_update()
 
     def kstart(self):
         logging.info('Configuring Avahi daemon.')
-        ip4 = 'yes' if db.has_keys(['exterior_ipv4']) else 'no'
-        ip6 = 'yes' if db.has_keys(['exterior_ipv6_ll']) else 'no'
         with open(MDNS_CONFIG, 'w') as file_:
             lines = []
             lines.append('[server]')
-            lines.append('use-ipv4=%s' % ip4)
-            lines.append('use-ipv6=%s' % ip6)
+            lines.append('use-ipv4=yes')
+            lines.append('use-ipv6=yes')
             lines.append('allow-interfaces=%s' % db.get('exterior_ifname'))
             lines.append('disallow-other-stacks=yes\n')
             lines.append('[publish]')
@@ -201,6 +116,7 @@ class MDNS(Ktask):
             lines.append('rlimit-nofile=30')
             lines.append('rlimit-stack=4194304')
             lines.append('rlimit-nproc=3')
+            lines.append('')
             lines = '\n'.join(lines)
             file_.write(lines)
 
@@ -208,12 +124,6 @@ class MDNS(Ktask):
         self.service_update()
 
     def kstop(self):
-        if self.nat_enabled:
-            # Disnable NAT
-            logging.info('Disabling Border Agent NAT.')
-            self.nat_enabled = False
-            nat_start('D')
-
         # Disable service
         logging.info('Removing Avahi service.')
         bash('rm /etc/avahi/services/%s.service' % db.get('dongle_name'))

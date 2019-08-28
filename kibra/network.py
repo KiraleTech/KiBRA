@@ -1,5 +1,6 @@
 import hashlib
 import ipaddress
+import json
 import logging
 import socket
 import struct
@@ -7,7 +8,8 @@ import time
 
 import kibra
 import kibra.database as db
-import kibra.iptables as iptables
+import kibra.iptables as IPTABLES
+import kibra.nat as NAT
 import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 from kibra.ktask import Ktask
 from kibra.shell import bash
@@ -72,26 +74,7 @@ def global_netconfig():
         prefix = '%s/64' % prefix.split('/')[0]
         db.set('prefix', prefix)
 
-    # Find exterior interface addresses
-    # Global IPv4 addresses
-    ipv4_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET, scope=0)
-    if ipv4_addrs:
-        logging.info('Using %s as exterior IPv4 address.', ipv4_addrs[0])
-        db.set('exterior_ipv4', ipv4_addrs[0])
-
-    # Link-local IPv4 addresses
-    ipv4_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET, scope=253)
-    if ipv4_addrs:
-        logging.info('Using %s as exterior IPv4 link-local address.', ipv4_addrs[0])
-        db.set('exterior_ipv4_ll', ipv4_addrs[0])
-
-    # Global IPv6 addresses
-    ipv6_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET6, scope=0)
-    if ipv6_addrs:
-        logging.info('Using %s as exterior IPv6 address.', ipv6_addrs[0])
-        db.set('exterior_ipv6', ipv6_addrs[0])
-
-    # Link-local IPv6 addresses
+    # Find exterior Link-local IPv6 address
     ipv6_addrs = get_addrs(db.get('exterior_ifname'), socket.AF_INET6, scope=253)
     if ipv6_addrs:
         logging.info('Using %s as exterior link-local IPv6 address.', ipv6_addrs[0])
@@ -409,7 +392,6 @@ def dongle_route_disable(prefix):
     except:
         logging.warning('Route for %s could not be disabled' % prefix)
 
-
 class NETWORK(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -429,23 +411,46 @@ class NETWORK(Ktask):
 
     def kstart(self):
         _ifup()
-        iptables.handle_ipv6('A')
-        iptables.handle_diag('I')
+        IPTABLES.handle_ipv6('A')
+        IPTABLES.handle_diag('I')
 
     def kstop(self):
-        iptables.handle_diag('D')
-        iptables.handle_ipv6('D')
+        IPTABLES.handle_diag('D')
+        IPTABLES.handle_ipv6('D')
         _ifdown()
 
     async def periodic(self):
+        # Detect if interior interface goes down
         try:
-            interior_link_up = IPR.link_lookup(
-                ifname=db.get('interior_ifname'), operstate='UP'
-            )
+            IPR.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
         except:
-            interior_link_up = False
-        if not interior_link_up:
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
-        # TODO: detect changes in addresses
+
+        # Keep track of exterior addresses
+        iface_addrs = []
+        iface_addrs += get_addrs(db.get('exterior_ifname'), socket.AF_INET)
+        iface_addrs += get_addrs(db.get('exterior_ifname'), socket.AF_INET6)
+
+        # Find which addresses to remove and which ones to add
+        ext_addrs = json.loads(db.get('exterior_addrs') or '[]')
+        old_addrs = ext_addrs
+        new_addrs = []
+        for addr in iface_addrs:
+            if addr not in old_addrs:
+                new_addrs.append(addr)
+            else:
+                old_addrs.remove(addr)
+        
+        # Remove old addresses
+        for addr in old_addrs:
+            NAT.handle_nat64_masking(addr, enable=False)
+            IPTABLES.handle_bagent_fwd(addr, enable=False)
+        
+        # Add new addresses
+        for addr in new_addrs:
+            NAT.handle_nat64_masking(addr, enable=True)
+            IPTABLES.handle_bagent_fwd(addr, enable=True)
+        
+        db.set('exterior_addrs', json.dumps(iface_addrs))

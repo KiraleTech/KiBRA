@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 
 import kibra.database as db
@@ -190,4 +191,48 @@ def netmap(old_dst, new_dst):
     bash(
         'ip6tables -t nat -A PREROUTING -i %s -d %s -j NETMAP --to %s'
         % (db.get('interior_ifname'), old_dst, new_dst)
+    )
+
+
+def handle_bagent_fwd(ext_addr, enable=True):
+    '''Enable or disable Border Agent traffic forwarding between one exterior 
+    address and the NCP, using Jool for IPv6 and iptables for IPv6'''
+
+    # Get parameters
+    try:
+        ipaddress.IPv4Address(ext_addr)
+        is_ipv4 = True
+    except:
+        is_ipv4 = False
+    jool_action = 'add' if enable else 'remove'
+    ipt_action = 'I' if enable else 'D'
+    ipt_bin = 'iptables' if is_ipv4 else 'ip6tables'
+    ext_ifame = db.get('exterior_ifname')
+    int_addr = db.get('dongle_rloc')
+    ext_port = db.get('exterior_port_mc')
+    int_port = db.get('bagent_port')
+    brdg_mark = db.get('bridging_mark')
+
+    # NAT 4 -> 6
+    if is_ipv4:
+        params = (jool_action, ext_addr, ext_port, int_addr, int_port)
+        bash('jool bib %s %s#%s %s#%s --udp' % params)
+    # NAT 6 -> 6
+    else:
+        params = (ipt_action, ext_ifame, ext_addr, ext_port, int_addr, int_port)
+        bash(
+            'ip6tables -w -t nat -%s PREROUTING -i %s -d %s -p udp --dport %d -j DNAT --to [%s]:%d'
+            % params
+        )
+        params = (ipt_action, ext_ifame, int_addr, int_port, ext_addr, ext_port)
+        bash(
+            'ip6tables -w -t nat -%s POSTROUTING -o %s -s %s -p udp --sport %d -j SNAT --to [%s]:%d'
+            % params
+        )
+
+    # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
+    params = (ipt_bin, ipt_action, ext_ifame, ext_addr, ext_port, brdg_mark)
+    bash(
+        '%s -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
+        % params
     )
