@@ -76,7 +76,7 @@ async def _master():
 def _main():
     global SERVER
 
-    logging.info('Launching KiBRA v%s...' % kibra.__version__)
+    logging.info('Launching KiBRA v%s' % kibra.__version__)
 
     # Load database
     db.load()
