@@ -81,6 +81,13 @@ def get_records():
     return records
 
 
+def new_external_addresses():
+    '''Be notified about new addresses in the external interface'''
+
+    # Restart Avahi to make it use the new addresses
+    logging.info('Restarting Avahi service.')
+    bash('service avahi-daemon restart')
+
 class MDNS(Ktask):
     def __init__(self):
         Ktask.__init__(

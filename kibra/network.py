@@ -9,6 +9,7 @@ import time
 import kibra
 import kibra.database as db
 import kibra.iptables as IPTABLES
+import kibra.mdns as MDNS
 import kibra.nat as NAT
 import pyroute2  # http://docs.pyroute2.org/iproute.html#api
 from kibra.ktask import Ktask
@@ -450,7 +451,12 @@ class NETWORK(Ktask):
         
         # Add new addresses
         for addr in new_addrs:
+            #TODO: except link local
             NAT.handle_nat64_masking(addr, enable=True)
             IPTABLES.handle_bagent_fwd(addr, enable=True)
+        
+        # Notify MDNS service
+        if new_addrs:
+            MDNS.new_external_addresses()
         
         db.set('exterior_addrs', json.dumps(iface_addrs))
