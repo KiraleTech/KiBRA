@@ -106,7 +106,7 @@ def enable_ncp():
         logging.info('NCP firmware is up to date.')
 
         # Make sure we are running Thread v3 (1.2.0)
-        if not kibra.__harness__:
+        if not kibra.__harness__ and 'Thread v3' not in send_cmd('show thver')[0]:
             send_cmd('clear')
             SERIAL_DEV.wait_for('status', 'none')
             send_cmd('config thver 3')
@@ -353,11 +353,11 @@ def _get_prefix_flags():
     # Force SLAAC if no other flags are set
     if not dp and not dhcp:
         slaac = True
-    
+
     # DHCP overrides SLAAC
     if dhcp:
         slaac = False
-    
+
     return slaac, dhcp, dp
 
 
