@@ -277,7 +277,7 @@ class DIAGS(Ktask):
                 prefix_bytes = bytes(value) + bytes(8)
                 prefix_addr = ipaddress.IPv6Address(prefix_bytes)
                 db.set('dongle_prefix', prefix_addr.compressed + '/64')
-            value = ThreadTLV.get_value(payload, TLV.C_ACTIVE_TIMESTAMP)
+            #value = ThreadTLV.get_value(payload, TLV.C_ACTIVE_TIMESTAMP)
             value = ThreadTLV.get_value(payload, TLV.C_SECURITY_POLICY)
             if value:
                 db.set('dongle_secpol', value.hex())
