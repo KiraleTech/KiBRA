@@ -106,7 +106,9 @@ def enable_ncp():
         logging.info('NCP firmware is up to date.')
 
         # Make sure we are running Thread v3 (1.2.0)
-        if not kibra.__kinosver__:
+        if not kibra.__harness__:
+            send_cmd('clear')
+            SERIAL_DEV.wait_for('status', 'none')
             send_cmd('config thver 3')
 
         # Enable ECM if not enabled
