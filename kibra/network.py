@@ -198,8 +198,8 @@ def dongle_conf():
     # Use last 32 bits of interior MAC as bridging mark
     db.set('bridging_mark', int(db.get('interior_mac').replace(':', '')[-8:], 16))
     db.set('bridging_table', db.get('interior_mac'))
-    # This is only useful when more than one interior interface is used
-    # db.set('exterior_port_mc', 20000 + int(db.get('interior_mac')[-2:], 16))
+    # Use an ephemeral port valid for Jool BIB
+    db.set('exterior_port_mc', 61001 + int(db.get('interior_mac')[-2:], 16))
 
 
 def _get_rt_tables():

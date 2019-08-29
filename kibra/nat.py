@@ -49,8 +49,8 @@ def handle_nat64_masking(ext_addr, enable=True):
         return
 
     params = (jool_action, ext_addr)
-    bash('jool pool4 %s --udp %s' % params)
-    bash('jool pool4 %s --icmp %s' % params)
+    bash('jool pool4 %s %s 61001-65535 --udp' % params)
+    bash('jool pool4 %s %s 61001-65535 --icmp' % params)
     POOL4_ACTIVE = True
 
     logging.info('%s %s as stateful NAT64 masking address.', ext_addr, log_action)

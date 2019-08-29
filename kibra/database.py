@@ -73,7 +73,7 @@ DB_ITEMS = {
     'exterior_addrs': [str, None, lambda x: True, False, False],
     'exterior_ipv6_ll': [str, None, lambda x: True, False, False],
     'exterior_mac': [str, None, lambda x: True, False, False],
-    'exterior_port_mc': [int, DEFS.PORT_MC, lambda x: True, False, False],
+    'exterior_port_mc': [int, 61001, lambda x: True, False, False],
     'interior_ifname': [str, None, lambda x: True, False, False],
     'interior_ifnumber': [int, None, lambda x: True, False, False],
     'interior_mac': [str, None, lambda x: True, False, False],
