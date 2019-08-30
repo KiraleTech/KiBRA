@@ -12,14 +12,13 @@ POOL4_ACTIVE = None
 def _nat_enable():
     global POOL4_ACTIVE
 
+    _nat_disable()
+
     bash('/sbin/modprobe jool')
     POOL4_ACTIVE = False
     logging.info('NAT64 engine started.')
 
-    if 'default' not in str(bash('jool instance display')):
-        bash('jool instance add --netfilter --pool6 64:ff9b::/96')
-        bash('jool global update logging-session true')
-        bash('jool global update logging-bib true')
+    bash('jool instance add --netfilter --pool6 64:ff9b::/96')
     logging.info('Prefix 64:ff9b::/96 added to NAT64 engine.')
 
 
