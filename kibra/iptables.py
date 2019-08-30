@@ -185,15 +185,6 @@ def block_local_multicast(action, maddr):
     bash('ip6tables -w -t filter -%s INPUT -s %s -d %s -j DROP' % (action, src, maddr))
 
 
-def netmap(old_dst, new_dst):
-    logging.info('Redirecting traffic from %s to %s.' % (old_dst, new_dst))
-    # TODO: make this work properly
-    bash(
-        'ip6tables -t nat -A PREROUTING -i %s -d %s -j NETMAP --to %s'
-        % (db.get('interior_ifname'), old_dst, new_dst)
-    )
-
-
 def handle_bagent_fwd(ext_addr, enable=True):
     '''Enable or disable Border Agent traffic forwarding between one exterior 
     address and the NCP, using Jool for IPv6 and iptables for IPv6'''
@@ -222,11 +213,6 @@ def handle_bagent_fwd(ext_addr, enable=True):
         params = (ipt_action, ext_ifame, ext_addr, ext_port, int_addr, int_port)
         bash(
             'ip6tables -w -t nat -%s PREROUTING -i %s -d %s -p udp --dport %d -j DNAT --to [%s]:%d'
-            % params
-        )
-        params = (ipt_action, ext_ifame, int_addr, int_port, ext_addr, ext_port)
-        bash(
-            'ip6tables -w -t nat -%s POSTROUTING -o %s -s %s -p udp --sport %d -j SNAT --to [%s]:%d'
             % params
         )
 
