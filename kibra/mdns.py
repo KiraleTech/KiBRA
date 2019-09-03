@@ -135,7 +135,7 @@ class MDNS(Ktask):
         # Disable service
         logging.info('Removing Avahi service.')
         bash('rm /etc/avahi/services/%s.service' % db.get('ncp_name'))
-        bash('service avahi-daemon reload')
+        bash('service avahi-daemon restart')
 
     def service_update(self):
         r_txt = '\t\t<txt-record>%s=%s</txt-record>'
@@ -190,5 +190,5 @@ class MDNS(Ktask):
         if snw != sod:
             with open(str(file_name), 'w') as file_:
                 file_.write(snw)
-            bash('service avahi-daemon reload')
+            bash('service avahi-daemon restart')
             logging.info('mDNS service updated.')
