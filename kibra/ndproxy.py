@@ -132,7 +132,7 @@ class NDProxy:
             if ns_tgt in db.get('exterior_addrs'):
                 self.send_na(src[0], ns_tgt)
             elif ns_tgt in list(self.duas.keys()):
-                delayed = not ns_tgt in db.get('dongle_eid_cache')
+                delayed = not ns_tgt in db.get('ncp_eid_cache')
                 self.send_na(src[0], ns_tgt, delayed=delayed)
 
     def add_del_dua(self, action, dua, reg_time=0, ifnumber=None):

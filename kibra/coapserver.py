@@ -250,7 +250,7 @@ class Res_N_MR(resource.Resource):
                 timeout_tlv = ThreadTLV(
                     t=TLV.A_TIMEOUT, l=4, v=struct.pack('!I', addr_tout)
                 )
-                net_name = db.get('dongle_netname').encode()
+                net_name = db.get('ncp_netname').encode()
                 network_name_tlv = ThreadTLV(
                     t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name
                 )
@@ -389,7 +389,7 @@ class DUAHandler:
             t=TLV.A_TIME_SINCE_LAST_TRANSACTION, l=4, v=struct.pack('!I', elapsed)
         ).array()
         # Network Name TLV
-        net_name = db.get('dongle_netname').encode()
+        net_name = db.get('ncp_netname').encode()
         payload += ThreadTLV(t=TLV.A_NETWORK_NAME, l=len(net_name), v=net_name).array()
         logging.info('out %s ans: %s' % (uri, ThreadTLV.sub_tlvs_str(payload)))
 
@@ -405,7 +405,7 @@ class DUAHandler:
         payload += ThreadTLV(t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
 
         prefix_bytes = ipaddress.IPv6Address(
-            db.get('dongle_prefix').split('/')[0]
+            db.get('ncp_prefix').split('/')[0]
         ).packed
         dst = ipaddress.IPv6Address(prefix_bytes[0:8] + bytes.fromhex(dst_iid))
 
@@ -558,7 +558,7 @@ class Res_B_BMR(resource.Resource):
         netowrk_name = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
 
         # Don't process BMLR.ntf messages from other networks
-        if netowrk_name and netowrk_name != db.get('dongle_netname').encode():
+        if netowrk_name and netowrk_name != db.get('ncp_netname').encode():
             return COAP_NO_RESPONSE
 
         # Register valid addresses
@@ -669,13 +669,13 @@ class Res_B_BA_uni(resource.Resource):
                     asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
         else:
             # Send ADDR_NTF.ans
-            bbr_rloc16 = ipaddress.IPv6Address(db.get('dongle_rloc')).packed[-2:]
+            bbr_rloc16 = ipaddress.IPv6Address(db.get('ncp_rloc')).packed[-2:]
             # If this BBR dongle originated the addr_qry, send addr_ntf to its
             # link local address
             if rloc16 == bbr_rloc16:
-                dst = db.get('dongle_ll')
+                dst = db.get('ncp_ll')
             else:
-                dst = NETWORK.get_rloc_from_short(db.get('dongle_prefix'), rloc16)
+                dst = NETWORK.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
             asyncio.ensure_future(
                 DUA_HNDLR.send_addr_ntf_ans(
                     dst, dua, eid=eid, rloc16=bbr_rloc16, elapsed=elapsed
@@ -823,7 +823,7 @@ class COAPSERVER(Ktask):
         Ktask.__init__(
             self,
             name='coapserver',
-            start_keys=['dongle_rloc', 'dongle_prefix'],
+            start_keys=['ncp_rloc', 'ncp_prefix'],
             stop_keys=['all_network_bbrs'],
             start_tasks=['serial', 'network', 'syslog'],
             stop_tasks=[],
@@ -839,7 +839,7 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR = MulticastHandler()
 
         # Set All Network BBRs multicast address as per 9.4.8.1
-        all_network_bbrs = NETWORK.get_prefix_based_mcast(db.get('dongle_prefix'), 3)
+        all_network_bbrs = NETWORK.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
         db.set('all_network_bbrs', all_network_bbrs)
         logging.info('Joining All Network BBRs group: %s' % all_network_bbrs)
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
@@ -866,7 +866,7 @@ class COAPSERVER(Ktask):
         # Bind to RLOC
         self.coap_servers.append(
             CoapServer(
-                addr=db.get('dongle_rloc'),
+                addr=db.get('ncp_rloc'),
                 port=DEFS.PORT_MM,
                 resources=[
                     (URI.tuple(URI.N_DR), Res_N_DR()),
@@ -879,7 +879,7 @@ class COAPSERVER(Ktask):
         # Bind to LL
         self.coap_servers.append(
             CoapServer(
-                addr=db.get('dongle_ll'),
+                addr=db.get('ncp_ll'),
                 port=DEFS.PORT_MM,
                 resources=[
                     (URI.tuple(URI.N_DR), Res_N_DR()),  # Only for own MTD children

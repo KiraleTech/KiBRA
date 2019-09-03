@@ -31,32 +31,32 @@ IPPROTO_IPV6 = 41
 def _parse_active_dataset(payload):
     channel, panid, sec_policy, mesh_prefix, xpanid, net_name = payload.split(' | ')
 
-    db.set('dongle_channel', int(channel))
-    db.set('dongle_panid', panid)
-    db.set('dongle_secpol', sec_policy)
+    db.set('ncp_channel', int(channel))
+    db.set('ncp_panid', panid)
+    db.set('ncp_secpol', sec_policy)
     prefix_bytes = bytes.fromhex(mesh_prefix.replace('0x', '')) + bytes(8)
     prefix_addr = ipaddress.IPv6Address(prefix_bytes)
-    db.set('dongle_prefix', prefix_addr.compressed + '/64')
+    db.set('ncp_prefix', prefix_addr.compressed + '/64')
     # TODO: take actions upon a mesh prefix change
-    db.set('dongle_xpanid', xpanid)
-    db.set('dongle_netname', net_name)
+    db.set('ncp_xpanid', xpanid)
+    db.set('ncp_netname', net_name)
 
 
 def _process_message(msgid, uptime, payload):
     logging.debug('msgid = %s, uptime = %s, payload = %s' % (msgid, uptime, payload))
 
     if msgid == SYSLOG_MSG_ID_CACHE_DEL:
-        cached_eids = db.get('dongle_eid_cache')
+        cached_eids = db.get('ncp_eid_cache')
         try:
             cached_eids.remove(payload)
-            db.set('dongle_eid_cache', cached_eids)
+            db.set('ncp_eid_cache', cached_eids)
         except:
             pass # It didn't exist in the list
         logging.info('Address %s is not cached anymore.' % payload)
     elif msgid == SYSLOG_MSG_ID_CACHE_ADD:
-        cached_eids = db.get('dongle_eid_cache')
+        cached_eids = db.get('ncp_eid_cache')
         cached_eids.append(payload)
-        db.set('dongle_eid_cache', cached_eids)
+        db.set('ncp_eid_cache', cached_eids)
         logging.info('Address %s is now cached.' % payload)
     elif msgid == SYSLOG_MSG_ID_BBR_PRI:
         if 'primary' not in db.get('bbr_status'):
@@ -72,7 +72,7 @@ def _process_message(msgid, uptime, payload):
         _parse_active_dataset(payload)
         logging.info('Active dataset changed.')
     elif msgid == SYSLOG_MSG_ID_JOIN_STATUS_OK:
-        db.set('dongle_status', 'joined')
+        db.set('ncp_status', 'joined')
         logging.info('Device just joined to the Thread network')
     elif msgid == SYSLOG_MSG_ID_JOIN_STATUS_ERR:
         # TODO: notify user
@@ -127,8 +127,8 @@ class SYSLOG(Ktask):
 
     def kstart(self):
         db.set('bbr_status', 'off')
-        db.delete('dongle_rloc')
-        db.delete('dongle_mleid')
+        db.delete('ncp_rloc')
+        db.delete('ncp_mleid')
         # Get interior link-local address
         iface_addrs = NETWORK.get_addrs(db.get('interior_ifname'), socket.AF_INET6)
         for addr in iface_addrs:

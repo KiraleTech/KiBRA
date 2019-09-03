@@ -171,7 +171,7 @@ def dongle_conf():
     '''Configure several network parameters'''
     # By Kirale convention, interior MAC address is obtained from the dongle
     # serial
-    serial = db.get('dongle_serial').split('+')[-1]
+    serial = db.get('ncp_serial').split('+')[-1]
     interior_mac = ':'.join(
         [
             serial[0:2],
@@ -186,7 +186,7 @@ def dongle_conf():
     # Also dongle MAC is related to interior MAC
     dongle_mac = bytearray.fromhex(interior_mac.replace(':', ''))
     dongle_mac[0] |= 0x02
-    db.set('dongle_mac', ':'.join(['%02x' % byte for byte in dongle_mac]))
+    db.set('ncp_mac', ':'.join(['%02x' % byte for byte in dongle_mac]))
     # Find the device with the configured MAC address
     links = IPR.get_links(IFLA_ADDRESS=db.get('interior_mac').lower())
     if links:
@@ -226,23 +226,23 @@ def assign_addr(addr):
     # Add interior interface IPv6 address
     if addr.startswith('fe80'):
         logging.info('Link-local address is %s', addr)
-        db.set('dongle_ll', addr)
+        db.set('ncp_ll', addr)
     else:
         IPR.addr('add', index=idx, address=addr, prefixlen=64)
 
         if 'ff:fe' in addr:
             logging.info('RLOC address is %s', addr)
-            db.set('dongle_rloc', addr)
+            db.set('ncp_rloc', addr)
         else:
             logging.info('ML-EID address is %s', addr)
-            db.set('dongle_mleid', addr)
+            db.set('ncp_mleid', addr)
 
     # Add dongle neighbour
     IPR.neigh(
         'replace',
         family=socket.AF_INET6,
         dst=addr,
-        lladdr=db.get('dongle_mac'),
+        lladdr=db.get('ncp_mac'),
         ifindex=idx,
         nud='permanent',
     )
@@ -418,7 +418,7 @@ class NETWORK(Ktask):
             self.kill()
         
         # Don't continue if NCP RLOC has not been asigned yet
-        if not db.has_keys(['dongle_rloc']):
+        if not db.has_keys(['ncp_rloc']):
             return
 
         # Keep track of exterior addresses

@@ -149,21 +149,21 @@ automatically at the first start with default values:
 ::
 
  {
-   "dongle_name": "Test",
-   "dongle_commcred": "KIRALE"
+   "ncp_name": "Test",
+   "ncp_commcred": "KIRALE"
  }
 
 The user can also force some other configuration options:
 ::
 
  {
-   "dongle_channel": 20,
-   "dongle_commcred": "KIRALE",
-   "dongle_name": "MyDongle",
-   "dongle_netname": "MyNetwork",
-   "dongle_panid": "0xc04b",
-   "dongle_role": "leader",
-   "dongle_serial": "KTWM102-11+201801+8404D2000000045C"
+   "ncp_channel": 20,
+   "ncp_commcred": "KIRALE",
+   "ncp_name": "MyDongle",
+   "ncp_netname": "MyNetwork",
+   "ncp_panid": "0xc04b",
+   "ncp_role": "leader",
+   "ncp_serial": "KTWM102-11+201801+8404D2000000045C"
    "exterior_ifname": "eth0",
    "prefix": "2017:0:0:5::/64"
  }

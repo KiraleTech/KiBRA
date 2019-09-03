@@ -170,7 +170,7 @@ def handle_diag(action):
 
     bash(
         'ip6tables -w -t mangle -%s OUTPUT -o lo -d %s -p udp --dport %s -j MARK --set-mark "%s"'
-        % (action, db.get('dongle_rloc'), DEFS.PORT_MM, db.get('bridging_mark'))
+        % (action, db.get('ncp_rloc'), DEFS.PORT_MM, db.get('bridging_mark'))
     )
 
 
@@ -199,7 +199,7 @@ def handle_bagent_fwd(ext_addr, enable=True):
     ipt_action = 'I' if enable else 'D'
     ipt_bin = 'iptables' if is_ipv4 else 'ip6tables'
     ext_ifame = db.get('exterior_ifname')
-    int_addr = db.get('dongle_rloc')
+    int_addr = db.get('ncp_rloc')
     ext_port = db.get('exterior_port_mc')
     int_port = db.get('bagent_port')
     brdg_mark = db.get('bridging_mark')

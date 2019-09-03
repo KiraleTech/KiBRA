@@ -84,7 +84,7 @@ def enable_ncp():
     global SERIAL_DEV
 
     # Find device and initialize port
-    port = _find_device(db.get('dongle_serial'))
+    port = _find_device(db.get('ncp_serial'))
     if not port:
         return
     logging.info('Serial device is %s.', port)
@@ -94,7 +94,7 @@ def enable_ncp():
 
     # Save serial number
     serial = send_cmd('show snum')[0]
-    db.set('dongle_serial', serial)
+    db.set('ncp_serial', serial)
 
     # Update the NCP firmware if needed
     if kibra.__kinosver__ not in send_cmd('show swver')[-1]:
@@ -123,34 +123,34 @@ def enable_ncp():
 
 def _dongle_apply_config():
     # Config network parameters
-    if 'dongle_emac' in db.CFG:
-        send_cmd('config emac %s' % db.get('dongle_emac'))
-    if db.get('dongle_outband'):
+    if 'ncp_emac' in db.CFG:
+        send_cmd('config emac %s' % db.get('ncp_emac'))
+    if db.get('ncp_outband'):
         # TODO: make sure that the required settings exist
         send_cmd('config outband')
-    if 'dongle_xpanid' in db.CFG:
-        send_cmd('config xpanid %s' % db.get('dongle_xpanid'))
-    if 'dongle_netkey' in db.CFG:
-        send_cmd('config mkey %s' % db.get('dongle_netkey'))
-    if 'dongle_prefix' in db.CFG:
-        send_cmd('config mlprefix %s' % db.get('dongle_prefix').split('/')[0])
-    if 'dongle_channel' in db.CFG:
-        logging.info('Configure dongle channel %s.', db.get('dongle_channel'))
-        send_cmd('config channel %s' % db.get('dongle_channel'))
-    if 'dongle_panid' in db.CFG:
-        logging.info('Configure dongle panid %s.', db.get('dongle_panid'))
-        send_cmd('config panid %s' % db.get('dongle_panid'))
-    if 'dongle_netname' in db.CFG:
-        logging.info('Configure dongle network name %s.', db.get('dongle_netname'))
-        send_cmd('config netname "%s"' % db.get('dongle_netname'))
-    if 'dongle_commcred' in db.CFG:
+    if 'ncp_xpanid' in db.CFG:
+        send_cmd('config xpanid %s' % db.get('ncp_xpanid'))
+    if 'ncp_netkey' in db.CFG:
+        send_cmd('config mkey %s' % db.get('ncp_netkey'))
+    if 'ncp_prefix' in db.CFG:
+        send_cmd('config mlprefix %s' % db.get('ncp_prefix').split('/')[0])
+    if 'ncp_channel' in db.CFG:
+        logging.info('Configure dongle channel %s.', db.get('ncp_channel'))
+        send_cmd('config channel %s' % db.get('ncp_channel'))
+    if 'ncp_panid' in db.CFG:
+        logging.info('Configure dongle panid %s.', db.get('ncp_panid'))
+        send_cmd('config panid %s' % db.get('ncp_panid'))
+    if 'ncp_netname' in db.CFG:
+        logging.info('Configure dongle network name %s.', db.get('ncp_netname'))
+        send_cmd('config netname "%s"' % db.get('ncp_netname'))
+    if 'ncp_commcred' in db.CFG:
         logging.info(
-            'Configure dongle comissioner credential %s.', db.get('dongle_commcred')
+            'Configure dongle comissioner credential %s.', db.get('ncp_commcred')
         )
-        send_cmd('config commcred "%s"' % db.get('dongle_commcred'))
+        send_cmd('config commcred "%s"' % db.get('ncp_commcred'))
 
     # Set role
-    role = db.get('dongle_role')
+    role = db.get('ncp_role')
     logging.info('Set dongle as %s.', role)
     send_cmd('config role %s' % role)
 
@@ -164,7 +164,7 @@ def _configure():
     while not ('none' in dongle_status or 'joined' in dongle_status):
         dongle_status = send_cmd('show status')[0]
         time.sleep(1)
-    db.set('dongle_status', dongle_status)
+    db.set('ncp_status', dongle_status)
 
     # Different actions according to dongle status
     if dongle_status == 'none':
@@ -327,7 +327,7 @@ class SERIAL(Ktask):
         Ktask.__init__(
             self,
             name='serial',
-            start_keys=['dongle_serial'],
+            start_keys=['ncp_serial'],
             start_tasks=['network', 'syslog'],
             stop_tasks=['diags', 'coapserver'],
             period=2,
@@ -335,7 +335,7 @@ class SERIAL(Ktask):
 
     def kstart(self):
         db.set('prefix_active', 0)
-        db.set('dongle_heui64', send_cmd('show heui64')[0])
+        db.set('ncp_heui64', send_cmd('show heui64')[0])
         _configure()
         # From now on the syslog daemon will detect changes
 
@@ -372,7 +372,7 @@ class SERIAL(Ktask):
             self.kill()
 
         # Don't continue if device is not joined
-        if db.get('dongle_status') != 'joined':
+        if db.get('ncp_status') != 'joined':
             return
 
         if not db.get('prefix_active'):

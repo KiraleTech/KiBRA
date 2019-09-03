@@ -34,7 +34,7 @@ def get_records():
     bitmap = 0x0
 
     # Connection mode
-    security_policy = db.get('dongle_secpol')
+    security_policy = db.get('ncp_secpol')
     # Check C bit
     if security_policy and bytes.fromhex(security_policy)[2] >> 4 & 1:
         mode = DTLS_PSKC
@@ -43,22 +43,22 @@ def get_records():
     bitmap |= mode << CONNECTION_MODE
 
     # Thread interface status
-    dongle_status = db.get('dongle_status') or ''
+    dongle_status = db.get('ncp_status') or ''
     if 'joined' in dongle_status:
         status = IFACE_UP
         if mode == DTLS_PSKC:
-            records['nn'] = db.get('dongle_netname')
-            records['xp'] = db.get('dongle_xpanid').replace('0x', '')
+            records['nn'] = db.get('ncp_netname')
+            records['xp'] = db.get('ncp_xpanid').replace('0x', '')
     elif 'none - saved configuration' in dongle_status:
         status = IFACE_CFG
         if mode == DTLS_PSKC:
-            records['nn'] = db.get('dongle_netname')
-            records['xp'] = db.get('dongle_xpanid').replace('0x', '')
+            records['nn'] = db.get('ncp_netname')
+            records['xp'] = db.get('ncp_xpanid').replace('0x', '')
     else:
         status = IFACE_OFF
         if mode == DTLS_PSKC:
             records['nn'] = db.get('kibra_model')
-            records['xp'] = db.get('dongle_heui64')
+            records['xp'] = db.get('ncp_heui64')
 
     bitmap |= status << THREAD_INTERFACE_STATUS
 
@@ -134,7 +134,7 @@ class MDNS(Ktask):
     def kstop(self):
         # Disable service
         logging.info('Removing Avahi service.')
-        bash('rm /etc/avahi/services/%s.service' % db.get('dongle_name'))
+        bash('rm /etc/avahi/services/%s.service' % db.get('ncp_name'))
         bash('service avahi-daemon reload')
 
     def service_update(self):
@@ -154,7 +154,7 @@ class MDNS(Ktask):
         snw.append('<service-group>')
         snw.append(
             '\t<name>%s %s %s</name>'
-            % (db.get('dongle_name'), records['vn'], records['mn'])
+            % (db.get('ncp_name'), records['vn'], records['mn'])
         )
         snw.append('\t<service>')
         snw.append('\t\t<type>_meshcop._udp</type>')
@@ -179,7 +179,7 @@ class MDNS(Ktask):
 
         # Load the previous service file, or create it
         pathlib.Path(MDNS_SERVICES).mkdir(parents=True, exist_ok=True)
-        service_file = '%s/%s.service' % (MDNS_SERVICES, db.get('dongle_name'))
+        service_file = '%s/%s.service' % (MDNS_SERVICES, db.get('ncp_name'))
         file_name = pathlib.Path(service_file)
         file_name.touch(exist_ok=True)
 

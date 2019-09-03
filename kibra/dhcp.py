@@ -24,7 +24,7 @@ class DHCP(Ktask):
         Ktask.__init__(
             self,
             name='dhcp',
-            start_keys=['prefix', 'interior_ifname', 'dongle_rloc', 'interior_mac'],
+            start_keys=['prefix', 'interior_ifname', 'ncp_rloc', 'interior_mac'],
             stop_keys=['interior_ifname'],
             start_tasks=['network', 'serial'],
             period=2,
@@ -44,10 +44,10 @@ class DHCP(Ktask):
             file_.write('\n')
             file_.write('iface ' + db.get('interior_ifname') + ' {\n')
             file_.write('\tclient-max-lease 1\n')
-            file_.write('\tunicast ' + db.get('dongle_rloc') + '\n')
+            file_.write('\tunicast ' + db.get('ncp_rloc') + '\n')
             file_.write('\trapid-commit yes\n')
-            file_.write('\toption ntp-server ' + db.get('dongle_mleid') + '\n')
-            file_.write('\toption dns-server ' + db.get('dongle_mleid') + '\n')
+            file_.write('\toption ntp-server ' + db.get('ncp_mleid') + '\n')
+            file_.write('\toption dns-server ' + db.get('ncp_mleid') + '\n')
             file_.write('\tpreference 255\n')
             file_.write('\tclass {\n')
             file_.write('\t\tT1 0\n')

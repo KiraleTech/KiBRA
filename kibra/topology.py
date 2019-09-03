@@ -61,7 +61,7 @@ def _get_oobcom(brouter):
             oobcom['actstamp'] = line.split(':')[-1].strip()
         elif '| Master Key' in line:
             oobcom['mkey'] = line.split(':')[-1].strip()
-    oobcom['commcred'] = '"%s"' % db.get('dongle_commcred')
+    oobcom['commcred'] = '"%s"' % db.get('ncp_commcred')
 
     return oobcom
 
@@ -94,7 +94,7 @@ def _stop_topology(dev):
 
 def form_topology():
     db.load()
-    brouter, dongles = _get_devices(db.get('dongle_serial'))
+    brouter, dongles = _get_devices(db.get('ncp_serial'))
     threads = []
 
     oobcom = _get_oobcom(brouter)
@@ -113,7 +113,7 @@ def form_topology():
 
 def clear_topology():
     db.load()
-    _, dongles = _get_devices(db.get('dongle_serial'))
+    _, dongles = _get_devices(db.get('ncp_serial'))
     threads = []
 
     for device in dongles:

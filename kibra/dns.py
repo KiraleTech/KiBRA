@@ -14,7 +14,7 @@ class DNS(Ktask):
         Ktask.__init__(
             self,
             name='dns',
-            start_keys=['dongle_mleid'],
+            start_keys=['ncp_mleid'],
             stop_keys=[],
             start_tasks=['network', 'serial', 'nat'],
             period=1,
@@ -32,7 +32,7 @@ class DNS(Ktask):
         # Add new configuration
         with open(DNS_CONFIG, 'w') as file_:
             file_.write('\nserver:')
-            file_.write('\n    interface: %s' % db.get('dongle_mleid'))
+            file_.write('\n    interface: %s' % db.get('ncp_mleid'))
             file_.write('\n    access-control: ::/0 allow')
             file_.write('\n    module-config: "dns64 validator iterator"')
             file_.write('\n    dns64-prefix: 64:ff9b::/96')

@@ -35,7 +35,7 @@ class DIAGS(Ktask):
         Ktask.__init__(
             self,
             name='diags',
-            start_keys=['dongle_ll', 'dongle_rloc', 'interior_ifname'],
+            start_keys=['ncp_ll', 'ncp_rloc', 'interior_ifname'],
             start_tasks=['serial', 'network'],
             period=3,
         )
@@ -48,7 +48,7 @@ class DIAGS(Ktask):
         self.last_time = 0
 
     def kstart(self):
-        ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
+        ll_addr = ipaddress.IPv6Address(db.get('ncp_ll')).compressed
         self.br_permanent_addr = '%s%%%s' % (ll_addr, db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
         IPTABLES.handle_diag('I')
@@ -93,7 +93,7 @@ class DIAGS(Ktask):
                     if rloc16 == self.br_rloc16:
                         continue
                     node_rloc = NETWORK.get_rloc_from_short(
-                        db.get('dongle_prefix'), rloc16
+                        db.get('ncp_prefix'), rloc16
                     )
                     response = await self.petitioner.con_request(
                         node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
