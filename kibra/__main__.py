@@ -17,6 +17,7 @@ from kibra.diags import DIAGS
 from kibra.dns import DNS
 from kibra.ksh import SERIAL, enable_ncp
 from kibra.ktask import status
+from kibra.syslog import SYSLOG
 from kibra.mdns import MDNS
 from kibra.nat import NAT
 from kibra.network import NETWORK, global_netconfig
@@ -92,8 +93,9 @@ def _main():
 
     # Start subtasks
     mdns = MDNS()
-    TASKS.append(SERIAL())
     TASKS.append(NETWORK())
+    TASKS.append(SERIAL())
+    TASKS.append(SYSLOG())
     TASKS.append(DHCP())
     TASKS.append(NAT())
     TASKS.append(DNS())

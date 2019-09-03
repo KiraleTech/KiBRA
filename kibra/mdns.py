@@ -102,6 +102,7 @@ class MDNS(Ktask):
 
     def kstart(self):
         logging.info('Configuring Avahi daemon.')
+
         with open(MDNS_CONFIG, 'w') as file_:
             lines = []
             lines.append('[server]')

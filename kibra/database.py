@@ -37,6 +37,7 @@ DB_ITEMS = {
     'action_nat': [str, None, lambda x: True, True, False],
     'action_network': [str, None, lambda x: True, True, False],
     'action_serial': [str, None, lambda x: True, True, False],
+    'action_syslog': [str, None, lambda x: True, True, False],
     'all_domain_bbrs': [str, None, lambda x: True, True, False],
     'all_network_bbrs': [str, None, lambda x: True, True, False],
     'autostart': [int, 0, lambda x: x in (0, 1), True, False],
@@ -52,6 +53,7 @@ DB_ITEMS = {
     'dongle_commcred': [str, DEF_COMMCRED, lambda x: True, True, True],
     'dongle_heui64': [str, None, lambda x: True, True, False],
     'dongle_mleid': [str, None, lambda x: True, False, False],
+    'dongle_eid_cache': [list, '[]', lambda x: True, True, False],
     'dongle_emac': [str, None, lambda x: True, True, False],
     'dongle_ll': [str, None, lambda x: True, False, False],
     'dongle_mac': [str, None, lambda x: True, False, False],
@@ -69,7 +71,7 @@ DB_ITEMS = {
     'dongle_xpanid': [str, None, lambda x: True, True, False],
     'exterior_ifname': [str, None, lambda x: True, False, False],
     'exterior_ifnumber': [int, None, lambda x: True, False, False],
-    'exterior_addrs': [str, None, lambda x: True, False, False],
+    'exterior_addrs': [list, '[]', lambda x: True, False, False],
     'exterior_ipv6_ll': [str, None, lambda x: True, False, False],
     'exterior_mac': [str, None, lambda x: True, False, False],
     'exterior_port_mc': [int, 61001, lambda x: True, False, False],
@@ -85,10 +87,10 @@ DB_ITEMS = {
         False,
         False,
     ],
-    'maddrs_perm': [str, None, lambda x: True, False, False],
+    'maddrs_perm': [list, '[]', lambda x: True, False, False],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
-    'mlr_cache': [str, None, lambda x: True, False, False],
+    'mlr_cache': [dict, '{}', lambda x: True, False, False],
     'mlr_timeout': [
         int,
         DEFS.BBR_DEF_MLR_TIMEOUT,
@@ -118,6 +120,7 @@ DB_ITEMS = {
     'status_nat': [str, None, lambda x: True, False, False],
     'status_network': [str, None, lambda x: True, False, False],
     'status_serial': [str, None, lambda x: True, False, False],
+    'status_syslog': [str, None, lambda x: True, False, False],
 }
 
 
@@ -133,9 +136,15 @@ def get(key):
             return None
         else:
             value = CFG[key]
-            if DB_ITEMS[key][DB_ITEMS_TYPE] is int:
+            type_ = DB_ITEMS[key][DB_ITEMS_TYPE]
+            if type_ is int:
                 return int(value)
-            return value
+            elif type_ is list:
+                return list(json.loads(value.replace("'", '"')))
+            elif type_ is dict:
+                return dict(json.loads(value.replace("'", '"')))
+            else:
+                return value
 
 
 def set(key, value):

@@ -217,6 +217,37 @@ def _rt_add_table(name, number):
         file_.write('\n%s\t%s\n' % (number, name))
 
 
+def assign_addr(addr):
+    '''Assign an address to the interior interface'''
+    # TODO: actions in case RLOC changes
+
+    idx = db.get('interior_ifnumber')
+
+    # Add interior interface IPv6 address
+    if addr.startswith('fe80'):
+        logging.info('Link-local address is %s', addr)
+        db.set('dongle_ll', addr)
+    else:
+        IPR.addr('add', index=idx, address=addr, prefixlen=64)
+
+        if 'ff:fe' in addr:
+            logging.info('RLOC address is %s', addr)
+            db.set('dongle_rloc', addr)
+        else:
+            logging.info('ML-EID address is %s', addr)
+            db.set('dongle_mleid', addr)
+
+    # Add dongle neighbour
+    IPR.neigh(
+        'replace',
+        family=socket.AF_INET6,
+        dst=addr,
+        lladdr=db.get('dongle_mac'),
+        ifindex=idx,
+        nud='permanent',
+    )
+
+
 def _ifup():
     # For the Thread Harness, remove old neighbors
     if kibra.__harness__:
@@ -240,46 +271,6 @@ def _ifup():
     # First bring it down to remove old invalid addresses
     IPR.link('set', index=idx, state='down')
     IPR.link('set', index=idx, state='up', txqlen=5000)
-
-    # Add inside IPv6 addresses
-    logging.info(
-        'Configuring interior interface %s with address %s.',
-        db.get('interior_ifname'),
-        db.get('dongle_rloc'),
-    )
-    IPR.addr('add', index=idx, address=db.get('dongle_rloc'), prefixlen=64)
-    logging.info(
-        'Configuring interior interface %s with address %s.',
-        db.get('interior_ifname'),
-        db.get('dongle_mleid'),
-    )
-    IPR.addr('add', index=idx, address=db.get('dongle_mleid'), prefixlen=64)
-
-    # Add dongle neighbour
-    IPR.neigh(
-        'replace',
-        family=socket.AF_INET6,
-        dst=db.get('dongle_ll'),
-        lladdr=db.get('dongle_mac'),
-        ifindex=idx,
-        nud='permanent',
-    )
-    IPR.neigh(
-        'replace',
-        family=socket.AF_INET6,
-        dst=db.get('dongle_rloc'),
-        lladdr=db.get('dongle_mac'),
-        ifindex=idx,
-        nud='permanent',
-    )
-    IPR.neigh(
-        'replace',
-        family=socket.AF_INET6,
-        dst=db.get('dongle_mleid'),
-        lladdr=db.get('dongle_mac'),
-        ifindex=idx,
-        nud='permanent',
-    )
 
     # Add custom routing table
     rt_tables = _get_rt_tables()
@@ -314,6 +305,7 @@ def _ifup():
                 priority=rule.get_attr('FRA_PRIORITY') or 0,
             )
     IPR.rule('add', family=socket.AF_INET6, table=rt_tables.get('local'), priority=1000)
+
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
     # air)
     logging.info(
@@ -351,11 +343,12 @@ def _ifdown():
     idx = IPR.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
     if not idx:
         return
-    '''
     # Delete traffic limits
-    bash('tc qdisc del dev ' + db.get('interior_ifname') +
-         ' root handle 1: cbq avpkt 1000 bandwidth 12mbit')
-    '''
+    bash(
+        'tc qdisc del dev '
+        + db.get('interior_ifname')
+        + ' root handle 1: cbq avpkt 1000 bandwidth 12mbit'
+    )
 
     # Delete custom rule
     IPR.rule(
@@ -393,30 +386,25 @@ def dongle_route_disable(prefix):
     except:
         logging.warning('Route for %s could not be disabled' % prefix)
 
+
 class NETWORK(Ktask):
     def __init__(self):
         Ktask.__init__(
             self,
             name='network',
-            start_keys=[
-                'bridging_mark',
-                'bridging_table',
-                'interior_ifname',
-                'dongle_rloc',
-                'interior_mac',
-            ],
-            start_tasks=['serial'],  # To obtain the latest dongle_rloc
+            start_keys=[],
+            start_tasks=[],
             stop_tasks=['diags', 'coapserver'],
-            period=2,
+            period=1,
         )
+        self.syslog = None
 
     def kstart(self):
+        dongle_conf()
         _ifup()
         IPTABLES.handle_ipv6('A')
-        IPTABLES.handle_diag('I')
 
     def kstop(self):
-        IPTABLES.handle_diag('D')
         IPTABLES.handle_ipv6('D')
         _ifdown()
 
@@ -428,6 +416,10 @@ class NETWORK(Ktask):
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
+        
+        # Don't continue if NCP RLOC has not been asigned yet
+        if not db.has_keys(['dongle_rloc']):
+            return
 
         # Keep track of exterior addresses
         iface_addrs = []
@@ -435,7 +427,7 @@ class NETWORK(Ktask):
         iface_addrs += get_addrs(db.get('exterior_ifname'), socket.AF_INET6)
 
         # Find which addresses to remove and which ones to add
-        ext_addrs = json.loads(db.get('exterior_addrs') or '[]')
+        ext_addrs = db.get('exterior_addrs')
         old_addrs = ext_addrs
         new_addrs = []
         for addr in iface_addrs:
@@ -443,20 +435,20 @@ class NETWORK(Ktask):
                 new_addrs.append(addr)
             else:
                 old_addrs.remove(addr)
-        
+
         # Remove old addresses
         for addr in old_addrs:
             NAT.handle_nat64_masking(addr, enable=False)
             IPTABLES.handle_bagent_fwd(addr, enable=False)
-        
+
         # Add new addresses
         for addr in new_addrs:
-            #TODO: except link local
+            # TODO: except link local
             NAT.handle_nat64_masking(addr, enable=True)
             IPTABLES.handle_bagent_fwd(addr, enable=True)
-        
+
         # Notify MDNS service
         if new_addrs:
             MDNS.new_external_addresses()
-        
-        db.set('exterior_addrs', json.dumps(iface_addrs))
+
+        db.set('exterior_addrs', iface_addrs)

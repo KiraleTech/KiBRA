@@ -7,8 +7,8 @@ import time
 import importlib_resources
 import kibra
 import kibra.database as db
+import kibra.network as NETWORK
 from kibra.ktask import Ktask
-from kibra.network import dongle_conf, dongle_route_enable
 from kibra.shell import bash
 from kibra.thread import DEFS, TLV
 from kibra.tlv import ThreadTLV
@@ -158,15 +158,13 @@ def _dongle_apply_config():
 def _configure():
     global SERIAL_DEV
 
-    dongle_status = send_cmd('show status', debug_level=kiserial.KiDebug.NONE)[0]
-
     # Wait for the dongle to reach a steady status
-    logging.info('Waiting until dongle is joined...')
-    db.set('dongle_status', 'disconnected')
-    dongle_status = ''
+    logging.info('Waiting until dongle is steady...')
+    dongle_status = 'disconnected'
     while not ('none' in dongle_status or 'joined' in dongle_status):
-        dongle_status = send_cmd('show status', debug_level=kiserial.KiDebug.NONE)[0]
+        dongle_status = send_cmd('show status')[0]
         time.sleep(1)
+    db.set('dongle_status', dongle_status)
 
     # Different actions according to dongle status
     if dongle_status == 'none':
@@ -174,61 +172,24 @@ def _configure():
             _dongle_apply_config()
         _enable_br()
         send_cmd('ifup')
-        _configure()
     elif dongle_status == 'none - saved configuration':
         _enable_br()
         send_cmd('ifup')
-        _configure()
     elif dongle_status == 'joined':
-        pass
+        send_cmd('ifdown')
+        _enable_br()
+        send_cmd('ifup')
     else:  # Other 'none' statuses
         logging.warning('Dongle status was "%s".' % dongle_status)
         send_cmd('clear')
+        SERIAL_DEV.wait_for('status', 'none')
         _configure()
-
-
-def _dongle_get_config():
-    db.set('dongle_role', send_cmd('show role')[0])
-    db.set('dongle_status', send_cmd('show status')[0])
-    db.set('dongle_heui64', send_cmd('show heui64')[0])
-
-    # Get mesh rloc and link local addresses
-    all_addrs = send_cmd('show ipaddr')
-
-    # Remove not registered addresses
-    addrs = []
-    for line in all_addrs:
-        try:
-            state, addr = line.split(' ')
-            if state == '[R]':
-                addrs.append(addr)
-        except:
-            # Old versions don't include registration information
-            addrs.append(line)
-
-    for ip6_addr in addrs:
-        if ip6_addr.startswith('ff'):
-            # KiNOS registers multicast addresses with MLR.req
-            continue
-        elif ip6_addr.startswith('fe80'):
-            db.set('dongle_ll', ip6_addr.strip('\r\n'))
-            logging.info('Link local address is %s.', db.get('dongle_ll'))
-        else:
-            if 'ff:fe' in ip6_addr:
-                db.set('dongle_rloc', ip6_addr.strip('\r\n'))
-                logging.info('RLOC address is %s.', db.get('dongle_rloc'))
-            else:
-                # TODO: check prefix
-                db.set('dongle_mleid', ip6_addr.strip('\r\n'))
-                logging.info('EID address is %s.', db.get('dongle_mleid'))
-    if not db.has_keys(['dongle_rloc']):
-        raise Exception('Error: Mesh RLOC not found.')
 
 
 def _enable_br():
     '''Enable CDC ETH traffic'''
     send_cmd('config brouter on')
-    logging.info('Border router has been enabled.')
+    logging.info('CDC ETH traffic has been enabled.')
 
 
 def bbr_dataset_update():
@@ -367,16 +328,16 @@ class SERIAL(Ktask):
             self,
             name='serial',
             start_keys=['dongle_serial'],
+            start_tasks=['network', 'syslog'],
             stop_tasks=['diags', 'coapserver'],
             period=2,
         )
 
     def kstart(self):
         db.set('prefix_active', 0)
-        dongle_conf()
+        db.set('dongle_heui64', send_cmd('show heui64')[0])
         _configure()
-        _dongle_get_config()
-        _bagent_on()
+        # From now on the syslog daemon will detect changes
 
     def kstop(self):
         if db.get('prefix_active'):
@@ -395,7 +356,7 @@ class SERIAL(Ktask):
                 dp=dp,
             )
 
-            # Mark prefix as active
+            # Mark prefix as inactive
             db.set('prefix_active', 0)
 
         _bagent_off()
@@ -410,6 +371,10 @@ class SERIAL(Ktask):
             self.kstop()
             self.kill()
 
+        # Don't continue if device is not joined
+        if db.get('dongle_status') != 'joined':
+            return
+
         if not db.get('prefix_active'):
             slaac, dhcp, dp = _get_prefix_flags()
 
@@ -419,8 +384,11 @@ class SERIAL(Ktask):
             if dp and db.get('status_coapserver') not in 'running':
                 return
 
+            # Enable border agent
+            _bagent_on()
+
             # Add route
-            dongle_route_enable(db.get('prefix'))
+            NETWORK.dongle_route_enable(db.get('prefix'))
 
             # Announce prefix to the network
             prefix_handle(

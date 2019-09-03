@@ -89,11 +89,10 @@ class DUAEntry:
 class MulticastHandler:
     def __init__(self):
         # Volatile multicast addresses list
-        self.maddrs = {}
-        db.set('mlr_cache', str(self.maddrs))
+        self.maddrs = db.get('mlr_cache')
 
         # Load presistent addresses
-        maddrs_perm = db.get('maddrs_perm') or []
+        maddrs_perm = db.get('maddrs_perm')
         for addr in maddrs_perm:
             self.addr_add(addr, datetime.datetime.max)
 
@@ -116,13 +115,13 @@ class MulticastHandler:
                 self.addr_add(str(addr), addr_tout)
             elif str(addr) in self.maddrs.keys():
                 self.addr_remove(str(addr))
-        db.set('mlr_cache', str(self.maddrs))
+        db.set('mlr_cache', self.maddrs)
 
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xFFFFFFFF:
             tout = datetime.datetime.max
             # Save the address in the presistent list
-            maddrs_perm = db.get('maddrs_perm') or []
+            maddrs_perm = db.get('maddrs_perm')
             if addr not in maddrs_perm:
                 maddrs_perm.append(addr)
                 db.set('maddrs_perm', maddrs_perm)
@@ -148,10 +147,10 @@ class MulticastHandler:
         self.maddrs.pop(addr)
 
         # Apply changes to cached addresses
-        db.set('mlr_cache', str(self.maddrs))
+        db.set('mlr_cache', self.maddrs)
 
         # Remove the address from the presistent list
-        maddrs_perm = db.get('maddrs_perm') or []
+        maddrs_perm = db.get('maddrs_perm')
         if addr in maddrs_perm:
             maddrs_perm.pop(addr)
             db.set('maddrs_perm', maddrs_perm)
@@ -483,7 +482,7 @@ class Res_N_DR(resource.Resource):
         )
 
         # BBR Primary/Secondary status
-        if 'primary' not in db.get('bbr_status'):
+        if not 'primary' in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
         elif len(DUA_HNDLR.entries) >= DUA_LIMIT:
             status = DMStatus.ST_RES_SHRT
@@ -826,9 +825,9 @@ class COAPSERVER(Ktask):
             name='coapserver',
             start_keys=['dongle_rloc', 'dongle_prefix'],
             stop_keys=['all_network_bbrs'],
-            start_tasks=['serial', 'network', 'diags'],
+            start_tasks=['serial', 'network', 'syslog'],
             stop_tasks=[],
-            period=0.5,
+            period=1,
         )
 
     def kstart(self):

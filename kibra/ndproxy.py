@@ -129,11 +129,11 @@ class NDProxy:
             logging.info('in ns from %s for %s' % (src[0], ns_tgt))
 
             # Generate Neighbor Advertisement
-            if ns_tgt in json.loads(db.get('exterior_addrs') or '[]'):
+            if ns_tgt in db.get('exterior_addrs'):
                 self.send_na(src[0], ns_tgt)
             elif ns_tgt in list(self.duas.keys()):
-                # TODO: no delay if DUA appears in the EID-to-RLOC Map Cache
-                self.send_na(src[0], ns_tgt, delayed=True)
+                delayed = not ns_tgt in db.get('dongle_eid_cache')
+                self.send_na(src[0], ns_tgt, delayed=delayed)
 
     def add_del_dua(self, action, dua, reg_time=0, ifnumber=None):
         if not 'primary' in db.get('bbr_status'):

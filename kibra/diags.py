@@ -1,8 +1,6 @@
-import asyncio
 import copy
 import ipaddress
 import logging
-import math
 import time
 
 import kibra
@@ -11,7 +9,6 @@ import kibra.iptables as IPTABLES
 import kibra.network as NETWORK
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
-from kibra.shell import bash
 from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
 
@@ -23,19 +20,6 @@ VALUES = [
     TLV.D_CHILD_TABLE,
 ]
 PET_DIAGS = ThreadTLV(t=TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
-
-VALUES = [
-    TLV.C_CHANNEL,
-    TLV.C_PAN_ID,
-    TLV.C_EXTENDED_PAN_ID,
-    TLV.C_NETWORK_NAME,
-    TLV.C_NETWORK_MESH_LOCAL_PREFIX,
-    TLV.C_ACTIVE_TIMESTAMP,
-    TLV.C_SECURITY_POLICY,
-]
-PET_ACT_DATASET = ThreadTLV(t=TLV.C_GET, l=len(VALUES), v=VALUES).array()
-
-PET_NET_DATA = ThreadTLV(t=TLV.D_TYPE_LIST, l=1, v=[TLV.D_NETWORK_DATA]).array()
 
 NODE_INACTIVE_MS = 90000
 
@@ -51,9 +35,9 @@ class DIAGS(Ktask):
         Ktask.__init__(
             self,
             name='diags',
-            start_keys=['dongle_ll', 'interior_ifname'],
+            start_keys=['dongle_ll', 'dongle_rloc', 'interior_ifname'],
             start_tasks=['serial', 'network'],
-            period=1,
+            period=3,
         )
         self.petitioner = CoapClient()
         self.br_rloc16 = ''
@@ -67,20 +51,21 @@ class DIAGS(Ktask):
         ll_addr = ipaddress.IPv6Address(db.get('dongle_ll')).compressed
         self.br_permanent_addr = '%s%%%s' % (ll_addr, db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
-        # Delete old values to prevent MDNS from using them before obtaning
-        # the updated ones
-        db.delete('dongle_xpanid')
-        db.delete('dongle_netname')
-        db.set('bbr_status', 'off')
+        IPTABLES.handle_diag('I')
 
     def kstop(self):
         self.petitioner.stop()
+        IPTABLES.handle_diag('D')
 
     async def periodic(self):
+        # Network visualization not needed in the Thread Harness
+        if kibra.__harness__:
+            return
+
         # Check internet connection
-        if not kibra.__harness__:
-            access = NETWORK.internet_access()
-            self.br_internet_access = 'online' if access else 'offline'
+        access = NETWORK.internet_access()
+        self.br_internet_access = 'online' if access else 'offline'
+
         # Diags
         response = await self.petitioner.con_request(
             self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
@@ -90,7 +75,6 @@ class DIAGS(Ktask):
 
         # Save BR RLOC16
         rloc16 = ThreadTLV.get_value(response, TLV.D_MAC_ADDRESS)
-        # TODO: update dongle_rloc and Linux address
         if rloc16:
             self.br_rloc16 = '%02x%02x' % (rloc16[0], rloc16[1])
 
@@ -103,16 +87,6 @@ class DIAGS(Ktask):
             self.last_diags = response
             self.last_time = current_time
             self._parse_diags(response)
-            # Network Data get
-            response = await self.petitioner.con_request(
-                self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_NET_DATA
-            )
-            self._parse_net_data(response)
-            # Active Data Set get
-            response = await self.petitioner.con_request(
-                self.br_permanent_addr, DEFS.PORT_MM, URI.C_AG, PET_ACT_DATASET
-            )
-            self._parse_active_dataset(response)
             # Update nodes info
             if not kibra.__harness__:
                 for rloc16 in self.nodes_list:
@@ -253,58 +227,3 @@ class DIAGS(Ktask):
                     self.nodes_list = [
                         n for n in self.nodes_list if n not in node['rloc16']
                     ]
-
-    def _parse_active_dataset(self, payload):
-        # No response to /c/ag
-        if payload is None or b'':
-            db.set('dongle_secpol', '0')
-        # Response present
-        else:
-            value = ThreadTLV.get_value(payload, TLV.C_CHANNEL)
-            if value:
-                db.set('dongle_channel', int(value[2]))
-            value = ThreadTLV.get_value(payload, TLV.C_PAN_ID)
-            if value:
-                db.set('dongle_panid', '0x' + ''.join('%02x' % byte for byte in value))
-            value = ThreadTLV.get_value(payload, TLV.C_EXTENDED_PAN_ID)
-            if value:
-                db.set('dongle_xpanid', '0x' + ''.join('%02x' % byte for byte in value))
-            value = ThreadTLV.get_value(payload, TLV.C_NETWORK_NAME)
-            if value:
-                db.set('dongle_netname', ''.join('%c' % byte for byte in value))
-            value = ThreadTLV.get_value(payload, TLV.C_NETWORK_MESH_LOCAL_PREFIX)
-            if value:
-                prefix_bytes = bytes(value) + bytes(8)
-                prefix_addr = ipaddress.IPv6Address(prefix_bytes)
-                db.set('dongle_prefix', prefix_addr.compressed + '/64')
-            value = ThreadTLV.get_value(payload, TLV.C_SECURITY_POLICY)
-            if value:
-                db.set('dongle_secpol', value.hex())
-
-    def _parse_net_data(self, tlvs):
-        is_pbbr = False
-        value = ThreadTLV.get_value(tlvs, TLV.D_NETWORK_DATA)
-        if value:
-            for tlv in ThreadTLV.sub_tlvs(value):
-                type_ = tlv.type >> 1
-                if type_ is TLV.N_SERVICE:
-                    # Detect BBR Dataset encoding
-                    if tlv.value[0] >> 7 and tlv.value[1] is 1 and tlv.value[2] is 1:
-                        server_tlvs = ThreadTLV.sub_tlvs(tlv.value[3:])
-                        '''BBR is primary if there is only one Server TLV in the
-                        BBR Dataset and the RLOC16 is the same as ours'''
-                        if len(server_tlvs) == 1:
-                            node_rloc = ipaddress.IPv6Address(
-                                db.get('dongle_rloc')
-                            ).packed
-                            if node_rloc[14:16] == server_tlvs[0].value[0:2]:
-                                is_pbbr = True
-
-        if is_pbbr:
-            if 'primary' not in db.get('bbr_status'):
-                logging.info('Setting this BBR as Primary')
-            db.set('bbr_status', 'primary')
-        else:
-            if 'secondary' not in db.get('bbr_status'):
-                logging.info('Setting this BBR as Secondary')
-            db.set('bbr_status', 'secondary')

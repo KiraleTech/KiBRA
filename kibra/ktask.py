@@ -81,6 +81,7 @@ class Ktask:
                 if task_action is action.START:
                     db.set(self.status_key, status.STARTING)
                     # Wait for tasks
+                    # TODO: make tasks only dependant on keys, not other tasks
                     for task in self.start_tasks:
                         logging.info(
                             'Task [%s] is waiting for [%s] to start.', self.name, task

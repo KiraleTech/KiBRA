@@ -149,7 +149,7 @@ class MCRouter:
                 # Filter by registered multicast groups
                 if not db.get('mlr_cache'):
                     continue
-                maddrs = list(json.loads(db.get('mlr_cache').replace("'", '"')).keys())
+                maddrs = list(db.get('mlr_cache').keys())
                 if str(dst_addr) not in maddrs:
                     continue
                 out_mif = INT_MIF
