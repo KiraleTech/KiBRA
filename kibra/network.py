@@ -252,14 +252,16 @@ def _ifup():
     if kibra.__harness__:
         bash('ip -6 neigh flush all')
 
+    ifname = db.get('interior_ifname')
+
     # Make sure forwarding is enabled
     bash('echo 1 > /proc/sys/net/ipv4/conf/all/forwarding')
     bash('echo 1 > /proc/sys/net/ipv6/conf/all/forwarding')
     logging.info('Forwarding has been enabled.')
 
     # Disable duplicate address detection for the interior interface
-    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' % db.get('interior_ifname'))
-    logging.info('DAD has been disabled for %s.', db.get('interior_ifname'))
+    bash('echo 0 > /proc/sys/net/ipv6/conf/%s/accept_dad' % ifname)
+    logging.info('DAD has been disabled for %s.', ifname)
 
     # Enable a bigger number of multicast groups
     # https://www.kernel.org/doc/Documentation/sysctl/net.txt
@@ -308,29 +310,22 @@ def _ifup():
     # Rate limit traffic to the interface, 125 kbps (maximum data rate in the
     # air)
     logging.info(
-        'Traffic rate limit established to %s on interface %s.',
-        '125 kbps',
-        db.get('interior_ifname'),
+        'Traffic rate limit established to %s on interface %s.', '125 kbps', ifname
+    )
+    bash('tc qdisc add dev %s root handle 1: cbq avpkt 1000 bandwidth 12mbit' % ifname)
+    bash(
+        'tc class add dev %s parent 1: classid 1:1 cbq rate 125kbit allot 1500 prio 5 bounded isolated'
+        % ifname
     )
     bash(
-        'tc qdisc add dev '
-        + db.get('interior_ifname')
-        + ' root handle 1: cbq avpkt 1000 bandwidth 12mbit'
-    )
-    bash(
-        'tc class add dev '
-        + db.get('interior_ifname')
-        + ' parent 1: classid 1:1 cbq rate 125kbit '
-        + 'allot 1500 prio 5 bounded isolated'
-    )
-    bash(
-        'tc filter add dev '
-        + db.get('interior_ifname')
-        + ' parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1'
+        'tc filter add dev %s parent 1: protocol ipv6 prio 16 u32 match ip6 dst ::/0 flowid 1:1'
+        % ifname
     )
 
 
 def _ifdown():
+    ifname = db.get('interior_ifname')
+
     # Remove custom routing table
     db.del_from_file(
         '/etc/iproute2/rt_tables',
@@ -339,15 +334,11 @@ def _ifdown():
     )
 
     # Don't continue if the interface is already down
-    idx = IPR.link_lookup(ifname=db.get('interior_ifname'), operstate='UP')
+    idx = IPR.link_lookup(ifname=ifname, operstate='UP')
     if not idx:
         return
     # Delete traffic limits
-    bash(
-        'tc qdisc del dev '
-        + db.get('interior_ifname')
-        + ' root handle 1: cbq avpkt 1000 bandwidth 12mbit'
-    )
+    bash('tc qdisc del dev %s root handle 1: cbq avpkt 1000 bandwidth 12mbit' % ifname)
 
     # Delete custom rule
     IPR.rule(
@@ -359,13 +350,11 @@ def _ifdown():
     )
 
     # Bring interior interface down
-    logging.info('Bringing %s interface down.', db.get('interior_ifname'))
+    logging.info('Bringing %s interface down.', ifname)
     try:
         IPR.link('set', index=db.get('interior_ifnumber'), state='down')
     except:
-        logging.warning(
-            'Exception bringing %s interface down.', db.get('interior_ifname')
-        )
+        logging.warning('Exception bringing %s interface down.', ifname)
 
 
 def dongle_route_enable(prefix):
