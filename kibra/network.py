@@ -360,7 +360,12 @@ def _ifdown():
 
     # Bring interior interface down
     logging.info('Bringing %s interface down.', db.get('interior_ifname'))
-    IPR.link('set', index=db.get('interior_ifnumber'), state='down')
+    try:
+        IPR.link('set', index=db.get('interior_ifnumber'), state='down')
+    except:
+        logging.warning(
+            'Exception bringing %s interface down.', db.get('interior_ifname')
+        )
 
 
 def dongle_route_enable(prefix):
@@ -373,7 +378,7 @@ def dongle_route_enable(prefix):
         )
         # bash('ip -6 route add %s dev %s' % (prefix, db.get('interior_ifname')))
     except:
-        logging.warning('Route for %s could not be enabled' % prefix)
+        logging.warning('Route for %s could not be enabled', prefix)
 
 
 def dongle_route_disable(prefix):
@@ -383,7 +388,7 @@ def dongle_route_disable(prefix):
         )
         # bash('ip -6 route del %s dev %s' % (prefix, db.get('interior_ifname')))
     except:
-        logging.warning('Route for %s could not be disabled' % prefix)
+        logging.warning('Route for %s could not be disabled', prefix)
 
 
 class NETWORK(Ktask):
