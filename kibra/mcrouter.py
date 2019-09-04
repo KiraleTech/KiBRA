@@ -239,4 +239,8 @@ class MCRouter:
         if ifnumber is None:
             ifnumber = db.get('exterior_ifnumber')
         ipv6_mreq = struct.pack('16sI', mcgroup, ifnumber)
-        self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, ipv6_mreq)
+        try:
+            self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, ipv6_mreq)
+        except Exception as exc:
+            # It might be already present
+            logging.warning(exc)
