@@ -133,6 +133,7 @@ class SYSLOG(Ktask):
         iface_addrs = NETWORK.get_addrs(db.get('interior_ifname'), socket.AF_INET6)
         for addr in iface_addrs:
             if addr.startswith('fe80'):
+                db.set('interior_ipv6_ll', addr)
                 # Start listening to KiNOS syslog messages
                 self.syslog = Syslog_Parser(addr)
 

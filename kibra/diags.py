@@ -51,11 +51,11 @@ class DIAGS(Ktask):
         ll_addr = ipaddress.IPv6Address(db.get('ncp_ll')).compressed
         self.br_permanent_addr = '%s%%%s' % (ll_addr, db.get('interior_ifname'))
         DIAGS_DB['nodes'] = []
-        IPTABLES.handle_diag('I')
+        IPTABLES.handle_diag('I', db.get('ncp_rloc'))
 
     def kstop(self):
         self.petitioner.stop()
-        IPTABLES.handle_diag('D')
+        IPTABLES.handle_diag('D', db.get('ncp_rloc'))
 
     async def periodic(self):
         # Network visualization not needed in the Thread Harness

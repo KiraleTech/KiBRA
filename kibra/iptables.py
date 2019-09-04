@@ -158,7 +158,7 @@ def _handle_ipv4(action):
     bash('iptables -w -t filter -%s INPUT -i %s -j DROP' % (action, exterior_ifname))
 
 
-def handle_diag(action):
+def handle_diag(action, ncp_rloc):
     '''handle_diag('I') -> Insert the rules
     diagNetfilter('D') -> Delete the rules'''
     if action is 'I':
@@ -170,7 +170,7 @@ def handle_diag(action):
 
     bash(
         'ip6tables -w -t mangle -%s OUTPUT -o lo -d %s -p udp --dport %s -j MARK --set-mark "%s"'
-        % (action, db.get('ncp_rloc'), DEFS.PORT_MM, db.get('bridging_mark'))
+        % (action, ncp_rloc, DEFS.PORT_MM, db.get('bridging_mark'))
     )
 
 

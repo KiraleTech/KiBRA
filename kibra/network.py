@@ -9,6 +9,8 @@ import time
 import kibra
 import kibra.database as db
 import kibra.iptables as IPTABLES
+import kibra.dhcp as DHCP
+import kibra.coapserver as COAPSERVER
 import kibra.mdns as MDNS
 import kibra.nat as NAT
 import pyroute2  # http://docs.pyroute2.org/iproute.html#api
@@ -42,23 +44,6 @@ def internet_access(host='1.1.1.1', port=53, timeout=0.7):
         return True
     except socket.error:
         return False
-
-
-def get_prefix_based_mcast(prefix, groupid):
-    '''RFC 3306'''
-    prefix = prefix.split('/')[0]
-    prefix_bytes = ipaddress.IPv6Address(prefix).packed
-    maddr_bytes = (
-        bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack('>I', groupid)
-    )
-    return ipaddress.IPv6Address(maddr_bytes).compressed
-
-
-def get_rloc_from_short(prefix, rloc16):
-    prefix = prefix.split('/')[0]
-    prefix_bytes = ipaddress.IPv6Address(prefix).packed
-    rloc_bytes = prefix_bytes[0:8] + bytes.fromhex('000000fffe00' + rloc16)
-    return ipaddress.IPv6Address(rloc_bytes).compressed
 
 
 def global_netconfig():
@@ -219,7 +204,6 @@ def _rt_add_table(name, number):
 
 def assign_addr(addr):
     '''Assign an address to the interior interface'''
-    # TODO: actions in case RLOC changes
 
     idx = db.get('interior_ifnumber')
 
@@ -228,11 +212,26 @@ def assign_addr(addr):
         logging.info('Link-local address is %s', addr)
         db.set('ncp_ll', addr)
     else:
-        IPR.addr('add', index=idx, address=addr, prefixlen=64)
+        try:
+            IPR.addr('add', index=idx, address=addr, prefixlen=64)
+        except:
+            pass  # It might already exist
 
+        # RLOC
         if 'ff:fe' in addr:
             logging.info('RLOC address is %s', addr)
+            old_ncp_rloc = db.get('ncp_rloc')
             db.set('ncp_rloc', addr)
+
+            if old_ncp_rloc and addr != old_ncp_rloc:
+                # Changes in RLOC affect servers
+                IPR.addr('del', index=idx, address=old_ncp_rloc, prefixlen=64)
+                COAPSERVER.OLD_NCP_RLOC = old_ncp_rloc
+                DHCP.dhcp_server_stop()
+                DHCP.dhcp_server_start()
+                IPTABLES.handle_diag('D', old_ncp_rloc)
+                IPTABLES.handle_diag('I', addr)
+        # ML-EID
         else:
             logging.info('ML-EID address is %s', addr)
             db.set('ncp_mleid', addr)
@@ -416,7 +415,7 @@ class NETWORK(Ktask):
             logging.error('Interface %s went down.', db.get('interior_ifname'))
             self.kstop()
             self.kill()
-        
+
         # Don't continue if NCP RLOC has not been asigned yet
         if not db.has_keys(['ncp_rloc']):
             return

@@ -4,7 +4,6 @@
 import argparse
 import asyncio
 import logging
-from time import sleep
 
 import daemonize
 import kibra
@@ -17,10 +16,10 @@ from kibra.diags import DIAGS
 from kibra.dns import DNS
 from kibra.ksh import SERIAL, enable_ncp
 from kibra.ktask import status
-from kibra.syslog import SYSLOG
 from kibra.mdns import MDNS
 from kibra.nat import NAT
 from kibra.network import NETWORK, global_netconfig
+from kibra.syslog import SYSLOG
 
 PID_FILE = '/tmp/kibra.pid'
 

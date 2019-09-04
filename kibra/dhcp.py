@@ -1,5 +1,5 @@
+import time
 from struct import pack
-from time import sleep
 
 import kibra.database as db
 import kitools
@@ -19,6 +19,55 @@ def ntp_server_opt(addr):
     return ':'.join([hex(byte).replace('0x', '').zfill(2) for byte in b_pload])
 
 
+def dhcp_server_start():
+    # Don't start if DHCP is not to be used
+    if not db.get('prefix_dhcp'):
+        return
+
+    # Stop DHCP daemon
+    bash(DHCP_DAEMON + ' stop')
+    # Remove previous configuration for this dongle
+    db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
+    # Add new configuration
+    with open(DHCP_CONFIG, 'w') as file_:
+        file_.write('\n')
+        file_.write('iface ' + db.get('interior_ifname') + ' {\n')
+        file_.write('\tclient-max-lease 1\n')
+        file_.write('\tunicast ' + db.get('ncp_rloc') + '\n')
+        file_.write('\trapid-commit yes\n')
+        file_.write('\toption ntp-server ' + db.get('ncp_mleid') + '\n')
+        file_.write('\toption dns-server ' + db.get('ncp_mleid') + '\n')
+        file_.write('\tpreference 255\n')
+        file_.write('\tclass {\n')
+        file_.write('\t\tT1 0\n')
+        file_.write('\t\tT2 0\n')
+        file_.write('\t\tpreferred-lifetime 86400\n')
+        file_.write('\t\tvalid-lifetime 86400\n')
+        file_.write('\t\tpool ' + db.get('prefix') + '\n')
+        file_.write('\t}\n')
+        file_.write('}\n')
+    # Allow for the file to be stored
+    time.sleep(0.2)
+    # Start DHCP daemon
+    bash(DHCP_DAEMON + ' start')
+
+
+def dhcp_server_stop():
+    # Don't stop if DHCP is not to be used
+    if not db.get('prefix_dhcp'):
+        return
+        
+    # Stop DHCP daemon
+    bash(DHCP_DAEMON + ' stop')
+    # Remove previous configuration for this dongle
+    db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
+    # Allow for the file to be stored
+    time.sleep(0.2)
+
+    # Start DHCP daemon
+    bash(DHCP_DAEMON + ' start')
+
+
 class DHCP(Ktask):
     def __init__(self):
         Ktask.__init__(
@@ -31,50 +80,7 @@ class DHCP(Ktask):
         )
 
     def kstart(self):
-        # Don't start if DHCP is not to be used
-        if not db.get('prefix_dhcp'):
-            return
-
-        # Stop DHCP daemon
-        bash(DHCP_DAEMON + ' stop')
-        # Remove previous configuration for this dongle
-        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
-        # Add new configuration
-        with open(DHCP_CONFIG, 'w') as file_:
-            file_.write('\n')
-            file_.write('iface ' + db.get('interior_ifname') + ' {\n')
-            file_.write('\tclient-max-lease 1\n')
-            file_.write('\tunicast ' + db.get('ncp_rloc') + '\n')
-            file_.write('\trapid-commit yes\n')
-            file_.write('\toption ntp-server ' + db.get('ncp_mleid') + '\n')
-            file_.write('\toption dns-server ' + db.get('ncp_mleid') + '\n')
-            file_.write('\tpreference 255\n')
-            file_.write('\tclass {\n')
-            file_.write('\t\tT1 0\n')
-            file_.write('\t\tT2 0\n')
-            file_.write('\t\tpreferred-lifetime 86400\n')
-            file_.write('\t\tvalid-lifetime 86400\n')
-            file_.write('\t\tpool ' + db.get('prefix') + '\n')
-            file_.write('\t}\n')
-            file_.write('}\n')
-        # Allow for the file to be stored
-        sleep(0.2)
-        # Start DHCP daemon
-        bash(DHCP_DAEMON + ' start')
-
-        # TODO: assign DHCP ALOC
+        dhcp_server_start()
 
     def kstop(self):
-        # Don't stop if DHCP is not to be used
-        if not db.get('prefix_dhcp'):
-            return
-
-        # Stop DHCP daemon
-        bash(DHCP_DAEMON + ' stop')
-        # Remove previous configuration for this dongle
-        db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
-        # Allow for the file to be stored
-        sleep(0.2)
-
-        # Start DHCP daemon
-        bash(DHCP_DAEMON + ' start')
+        dhcp_server_stop()

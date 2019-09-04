@@ -12,7 +12,7 @@ import aiocoap
 import aiocoap.resource as resource
 import kibra
 import kibra.database as db
-import kibra.network as NETWORK
+import kibra.thread as THREAD
 from aiocoap.numbers.codes import Code
 from aiocoap.numbers.types import Type
 from kibra.coapclient import CoapClient
@@ -29,6 +29,8 @@ IP = IPRoute()
 DUA_HNDLR = None
 MCAST_HNDLR = None
 
+OLD_NCP_RLOC = None
+
 COAP_NO_RESPONSE = None
 
 # Limit the number of DUA and Multicast registrations managed by this BBR
@@ -44,11 +46,24 @@ class CoapServer:
         self.resources = resources
         for res in self.resources:
             self.root.add_resource(res[0], res[1])
+
+        self.addr = addr
+        self.port = port
+        self.iface = iface
+        self.start()
+
+    def start(self):
+        for res in self.resources:
+            iface_txt = '%%%s' % self.iface if self.iface else ''
+            logging.info(
+                'Starting CoAP Server in [%s%s]:%s/%s'
+                % (self.addr, iface_txt, self.port, '/'.join(res[0]))
+            )
         self.context = aiocoap.Context()
-        if iface:
-            bind = (addr, port, 0, int(iface))
+        if self.iface:
+            bind = (self.addr, self.port, 0, int(self.iface))
         else:
-            bind = (addr, port)
+            bind = (self.addr, self.port)
         self.task = asyncio.Task(
             self.context.create_server_context(self.root, bind=bind)
         )
@@ -404,9 +419,7 @@ class DUAHandler:
         payload = ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=dua_bytes).array()
         payload += ThreadTLV(t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
 
-        prefix_bytes = ipaddress.IPv6Address(
-            db.get('ncp_prefix').split('/')[0]
-        ).packed
+        prefix_bytes = ipaddress.IPv6Address(db.get('ncp_prefix').split('/')[0]).packed
         dst = ipaddress.IPv6Address(prefix_bytes[0:8] + bytes.fromhex(dst_iid))
 
         logging.info('out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
@@ -675,7 +688,7 @@ class Res_B_BA_uni(resource.Resource):
             if rloc16 == bbr_rloc16:
                 dst = db.get('ncp_ll')
             else:
-                dst = NETWORK.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
+                dst = THREAD.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
             asyncio.ensure_future(
                 DUA_HNDLR.send_addr_ntf_ans(
                     dst, dua, eid=eid, rloc16=bbr_rloc16, elapsed=elapsed
@@ -833,13 +846,14 @@ class COAPSERVER(Ktask):
     def kstart(self):
         global DUA_HNDLR
         global MCAST_HNDLR
+
         logging.info('Starting DUA handler')
         DUA_HNDLR = DUAHandler()
         logging.info('Starting Multicast handler')
         MCAST_HNDLR = MulticastHandler()
 
         # Set All Network BBRs multicast address as per 9.4.8.1
-        all_network_bbrs = NETWORK.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
+        all_network_bbrs = THREAD.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
         db.set('all_network_bbrs', all_network_bbrs)
         logging.info('Joining All Network BBRs group: %s' % all_network_bbrs)
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
@@ -847,7 +861,7 @@ class COAPSERVER(Ktask):
 
         if db.get('prefix_dua'):
             # Set All Domain BBRs multicast address as per 9.4.8.1
-            all_domain_bbrs = NETWORK.get_prefix_based_mcast(db.get('prefix'), 3)
+            all_domain_bbrs = THREAD.get_prefix_based_mcast(db.get('prefix'), 3)
             db.set('all_domain_bbrs', all_domain_bbrs)
             logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
             MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
@@ -859,10 +873,9 @@ class COAPSERVER(Ktask):
                 'join', 'ff03::2', db.get('interior_ifnumber')
             )
 
-        # Thread side server
+        # Launch CoAP servers
         self.coap_servers = []
 
-        logging.info('Launching CoAP Servers in MM port')
         # Bind to RLOC
         self.coap_servers.append(
             CoapServer(
@@ -876,6 +889,7 @@ class COAPSERVER(Ktask):
                 iface=db.get('interior_ifnumber'),
             )
         )
+
         # Bind to LL
         self.coap_servers.append(
             CoapServer(
@@ -889,6 +903,7 @@ class COAPSERVER(Ktask):
                 iface=db.get('interior_ifnumber'),
             )
         )
+
         # Bind to Realm-Local All-Routers
         self.coap_servers.append(
             CoapServer(
@@ -899,7 +914,6 @@ class COAPSERVER(Ktask):
             )
         )
 
-        logging.info('Launching CoAP Servers in BB port')
         # Bind Res_B_BMR to all_network_bbrs
         self.coap_servers.append(
             CoapServer(
@@ -909,10 +923,11 @@ class COAPSERVER(Ktask):
                 iface=db.get('exterior_ifnumber'),
             )
         )
+
         # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
         self.coap_servers.append(
             CoapServer(
-                addr='%s%%%s' % (db.get('all_domain_bbrs'), db.get('exterior_ifname')),
+                addr=db.get('all_domain_bbrs'),
                 port=db.get('bbr_port'),
                 resources=[
                     (URI.tuple(URI.B_BQ), Res_B_BQ()),
@@ -921,6 +936,7 @@ class COAPSERVER(Ktask):
                 iface=db.get('exterior_ifnumber'),
             )
         )
+
         # Bind Res_B_BA to exterior link-local
         self.coap_servers.append(
             CoapServer(
@@ -957,4 +973,21 @@ class COAPSERVER(Ktask):
         DUA_HNDLR.stop()
 
     async def periodic(self):
+        global OLD_NCP_RLOC
+
         MCAST_HNDLR.reg_periodic()
+
+        if OLD_NCP_RLOC:
+            self.ncp_rloc_changed(OLD_NCP_RLOC)
+            OLD_NCP_RLOC = None
+
+    def ncp_rloc_changed(self, old_ncp_rloc):
+        if not old_ncp_rloc:
+            return
+
+        for coap_server in self.coap_servers:
+            if coap_server.addr == old_ncp_rloc:
+                logging.info('A change in NCP RLOC triggered a CoAP server reload.')
+                coap_server.context.shutdown()
+                coap_server.addr = db.get('ncp_rloc')
+                coap_server.start()

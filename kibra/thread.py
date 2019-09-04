@@ -1,4 +1,6 @@
+import ipaddress
 import random
+import struct
 
 
 class TLV:
@@ -191,3 +193,20 @@ class DEFS:
     # Not defined by Thread
     BBR_DEF_REREG_DELAY = 6
     BBR_DEF_MLR_TIMEOUT = 3600
+
+
+def get_prefix_based_mcast(prefix, groupid):
+    '''RFC 3306'''
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    maddr_bytes = (
+        bytes.fromhex('ff320040') + prefix_bytes[0:8] + struct.pack('>I', groupid)
+    )
+    return ipaddress.IPv6Address(maddr_bytes).compressed
+
+
+def get_rloc_from_short(prefix, rloc16):
+    prefix = prefix.split('/')[0]
+    prefix_bytes = ipaddress.IPv6Address(prefix).packed
+    rloc_bytes = prefix_bytes[0:8] + bytes.fromhex('000000fffe00' + rloc16)
+    return ipaddress.IPv6Address(rloc_bytes).compressed
