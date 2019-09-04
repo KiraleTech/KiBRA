@@ -189,7 +189,7 @@ class Res_N_MR(resource.Resource):
     '''Multicast registration, Thread 1.2 5.24'''
 
     @staticmethod
-    def _parse_addrs(payload):
+    def parse_addrs(payload):
         # Unspecified error if bad payload
         if len(payload) % 16 != 0:
             return DMStatus.ST_UNSPEC, [], []
@@ -236,7 +236,7 @@ class Res_N_MR(resource.Resource):
             # IPv6 Addresses TLV
             addrs_value = ThreadTLV.get_value(request.payload, TLV.A_IPV6_ADDRESSES)
             if addrs_value:
-                status, good_addrs, bad_addrs = Res_N_MR._parse_addrs(addrs_value)
+                status, good_addrs, bad_addrs = Res_N_MR.parse_addrs(addrs_value)
 
             # Timeout TLV
             timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
@@ -551,32 +551,28 @@ class Res_B_BMR(resource.Resource):
     async def render_post(self, request):
         # Incoming TLVs parsing
         logging.info(
-            'in %s req: %s' % (URI.B_BMR, ThreadTLV.sub_tlvs_str(request.payload))
+            'in %s ntf: %s' % (URI.B_BMR, ThreadTLV.sub_tlvs_str(request.payload))
         )
 
         # Primary BBR shouldn't receive this message
-        if not 'primary' in db.get('bbr_status'):
+        if not 'secondary' in db.get('bbr_status'):
             return COAP_NO_RESPONSE
 
+        '''
         # IPv6 Addresses TLV
         addrs = []
         value = ThreadTLV.get_value(request.payload, TLV.A_IPV6_ADDRESSES)
         if value:
-            _, addrs = Res_N_MR._parse_addrs(value)
+            _, addrs, _ = Res_N_MR.parse_addrs(value)
 
         # Timeout TLV
         timeout = ThreadTLV.get_value(request.payload, TLV.A_TIMEOUT)
 
-        # Network Name TLV
-        netowrk_name = ThreadTLV.get_value(request.payload, TLV.A_NETWORK_NAME)
-
-        # Don't process BMLR.ntf messages from other networks
-        if netowrk_name and netowrk_name != db.get('ncp_netname').encode():
-            return COAP_NO_RESPONSE
-
         # Register valid addresses
         if addrs and timeout:
             MCAST_HNDLR.reg_update(addrs, timeout)
+        '''
+        # TODO: mantain a Backup Multicast Listeners Table
 
         return COAP_NO_RESPONSE
 
