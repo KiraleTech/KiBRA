@@ -21,7 +21,10 @@ SERIAL_DEV = None
 
 def send_cmd(cmd, debug_level=None):
     logging.info(cmd)
-    resp = SERIAL_DEV.ksh_cmd(cmd, debug_level)
+    try:
+        resp = SERIAL_DEV.ksh_cmd(cmd, debug_level)
+    except:
+        logging.error('Device %s is not responding.', db.get('serial_device'))
     logging.info('\n'.join(resp))
     return resp
 
@@ -370,9 +373,12 @@ class SERIAL(Ktask):
             logging.error('Device %s has been disconnected.', db.get('serial_device'))
             self.kstop()
             self.kill()
+        except Exception:
+            logging.error('Device %s is not responding.', db.get('serial_device'))
+            return
 
         # Don't continue if device is not joined
-        if db.get('ncp_status') != 'joined':
+        if db.get('ncp_status') != 'joined' or db.get('status_serial') != 'running':
             return
 
         if not db.get('prefix_active'):

@@ -354,7 +354,7 @@ def _ifdown():
     try:
         IPR.link('set', index=db.get('interior_ifnumber'), state='down')
     except:
-        logging.warning('Exception bringing %s interface down.', ifname)
+        logging.error('Exception bringing %s interface down.', ifname)
 
 
 def dongle_route_enable(prefix):

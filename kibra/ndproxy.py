@@ -156,9 +156,9 @@ class NDProxy:
         msg = struct.pack('16sI', sn_addr_bytes, ifnumber)
         try:
             self.icmp6_sock.setsockopt(IPPROTO_IPV6, action_, msg)
-        except Exception as exc:
-            # It might be already present
-            logging.warning(exc)
+        except:
+            # We were already listening to this address
+            pass
 
         if action == 'add':
             # Add DUA to the list

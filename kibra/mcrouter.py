@@ -241,6 +241,6 @@ class MCRouter:
         ipv6_mreq = struct.pack('16sI', mcgroup, ifnumber)
         try:
             self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, ipv6_mreq)
-        except Exception as exc:
-            # It might be already present
-            logging.warning(exc)
+        except:
+            # We were already listening to this address
+            pass
