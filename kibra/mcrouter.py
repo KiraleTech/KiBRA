@@ -235,12 +235,11 @@ class MCRouter:
         iptables.block_local_multicast(iptables_action, mcgroup)
 
         # Add socket option
-        mcgroup = ipaddress.IPv6Address(mcgroup).packed
         if ifnumber is None:
             ifnumber = db.get('exterior_ifnumber')
-        ipv6_mreq = struct.pack('16sI', mcgroup, ifnumber)
+        ipv6_mreq = struct.pack('16sI', ipaddress.IPv6Address(mcgroup).packed, ifnumber)
         try:
             self.mc6g_sock.setsockopt(IPPROTO_IPV6, socket_action, ipv6_mreq)
         except:
             # We were already listening to this address
-            pass
+            logging.warning('Unable to %s multicast group %s.', action, mcgroup)

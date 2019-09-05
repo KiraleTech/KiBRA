@@ -64,14 +64,21 @@ class CoapServer:
             bind = (self.addr, self.port, 0, int(self.iface))
         else:
             bind = (self.addr, self.port)
-        self.task = asyncio.Task(
-            self.context.create_server_context(self.root, bind=bind)
-        )
+        try:
+            self.task = asyncio.Task(
+                self.context.create_server_context(self.root, bind=bind)
+            )
+        except:
+            logging.error(
+                'Unable to launch CoAP server [%s%s]:%s/%s'
+                % (self.addr, iface_txt, self.port, '/'.join(res[0]))
+            )
 
     def stop(self):
         self.context.shutdown()
-        self.task.cancel()
-        # TODO: https://github.com/chrysn/aiocoap/issues/156
+        if self.task:
+            self.task.cancel()
+            # TODO: https://github.com/chrysn/aiocoap/issues/156
 
 
 class DMStatus:
