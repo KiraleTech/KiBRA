@@ -468,8 +468,6 @@ class DUAHandler:
         # Send unsolicited NA
         self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
 
-        # TODO: save entries to database
-
     def remove_entry(self, entry=None, dua=None):
         if not entry:
             for entry_ in self.entries:
@@ -889,10 +887,13 @@ class COAPSERVER(Ktask):
         # Bind to LL
         self.coap_servers.append(
             CoapServer(
-                addr=db.get('ncp_ll'),
+                addr=db.get('interior_ipv6_ll'),
                 port=DEFS.PORT_MM,
                 resources=[
-                    (URI.tuple(URI.N_DR), Res_N_DR()),  # Only for own MTD children
+                    (
+                        URI.tuple(URI.N_DR),
+                        Res_N_DR(),
+                    ),  # Only for own NCP and MTD children
                     (URI.tuple(URI.N_MR), Res_N_MR()),
                     (URI.tuple(URI.A_AE), Res_A_AE()),
                 ],
