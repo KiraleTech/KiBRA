@@ -93,7 +93,8 @@ class DMStatus:
 
 
 class DUAEntry:
-    def __init__(self, eid, dua):
+    def __init__(self, src_rloc, eid, dua):
+        self.src_rloc = src_rloc
         self.eid = eid
         self.dua = dua
         self.reg_time = datetime.datetime.now().timestamp()
@@ -265,6 +266,7 @@ class Res_N_MR(resource.Resource):
                     reg_addrs.append(ipaddress.IPv6Address(addr_bytes).compressed)
                     reg_addrs_bytes += addr_bytes
                 MCAST_HNDLR.reg_update(reg_addrs, addr_tout)
+
                 # Send BMLR.ntf
                 ipv6_addressses_tlv = ThreadTLV(
                     t=TLV.A_IPV6_ADDRESSES, l=16 * len(good_addrs), v=reg_addrs_bytes
@@ -316,7 +318,7 @@ class DUAHandler:
             self.coap_client.stop()
             self.coap_client = None
 
-    def reg_update(self, eid, dua, elapsed):
+    def reg_update(self, src_rloc, eid, dua, elapsed):
         old_entry = None
         for entry in self.entries:
             if entry.dua == dua:
@@ -337,7 +339,7 @@ class DUAHandler:
                 self.announce(entry)
         else:
             # New entry
-            new_entry = DUAEntry(eid, dua)
+            new_entry = DUAEntry(src_rloc, eid, dua)
             self.entries.append(new_entry)
             asyncio.ensure_future(self.perform_dad(new_entry))
         logging.info('EID %s registration update for DUA %s', eid, dua)
@@ -347,8 +349,8 @@ class DUAHandler:
         for entry in self.entries:
             if dua == entry.dua:
                 elapsed = datetime.datetime.now().timestamp() - entry.reg_time
-                return entry.eid, int(elapsed), entry.dad
-        return None, None, None
+                return entry.src_rloc, entry.eid, int(elapsed), entry.dad
+        return None, None, None, None
 
     async def send_bb_query(self, client, dua, rloc16=None):
         dua_bytes = ipaddress.IPv6Address(dua).packed
@@ -363,7 +365,7 @@ class DUAHandler:
 
     async def send_pro_bb_ntf(self, dua):
         # Find the ML-EID that registered this DUA
-        eid, elapsed, _ = DUA_HNDLR.find_eid(dua)
+        _, eid, elapsed, _ = DUA_HNDLR.find_eid(dua)
         if not eid:
             return
 
@@ -379,7 +381,7 @@ class DUAHandler:
 
     async def send_bb_ans(self, dst, dua, rloc16=None):
         # Find the ML-EID that registered this DUA
-        eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
+        _, eid, elapsed, dad = DUA_HNDLR.find_eid(dua)
 
         # Don't send if DAD is still going
         if eid is None or dad is not False:
@@ -420,20 +422,15 @@ class DUAHandler:
         else:
             await self.coap_client.non_request(dst, port, uri, payload)
 
-    async def send_addr_err(self, dua, eid_iid, dst_iid):
+    async def send_addr_err(self, dst, mtype, dua, eid_iid):
         'Thread 1.2 5.23.3.6.4'
         dua_bytes = ipaddress.IPv6Address(dua).packed
         payload = ThreadTLV(t=TLV.A_TARGET_EID, l=16, v=dua_bytes).array()
         payload += ThreadTLV(t=TLV.A_ML_EID, l=8, v=bytes.fromhex(eid_iid)).array()
 
-        prefix_bytes = ipaddress.IPv6Address(db.get('ncp_prefix').split('/')[0]).packed
-        dst = ipaddress.IPv6Address(prefix_bytes[0:8] + bytes.fromhex(dst_iid))
-
         logging.info('out %s ntf: %s' % (URI.A_AE, ThreadTLV.sub_tlvs_str(payload)))
 
-        await self.coap_client.con_request(
-            dst.compressed, DEFS.PORT_MM, URI.A_AE, payload
-        )
+        await self.coap_client.request(dst, DEFS.PORT_MM, URI.A_AE, mtype, payload)
 
     async def perform_dad(self, entry):
         # Send BB.qry DUA_DAD_REPEAT times
@@ -508,6 +505,8 @@ class Res_N_DR(resource.Resource):
             dua = None
             eid = None
             elapsed = 0
+            # Only used for sending ADDR_ERR.ntf in case of DAD finds duplicate
+            src_rloc = request.remote.sockaddr[0]
 
             # ML-EID TLV
             value = ThreadTLV.get_value(request.payload, TLV.A_ML_EID)
@@ -536,10 +535,10 @@ class Res_N_DR(resource.Resource):
                     status = int(db.get('dua_next_status'))
                     db.set('dua_next_status_eid', '')
                     db.set('dua_next_status', '')
-                elif DUA_HNDLR.reg_update(eid, dua, elapsed):
+                elif DUA_HNDLR.reg_update(src_rloc, eid, dua, elapsed):
                     status = DMStatus.ST_SUCESS
                 else:
-                    # Duplication detected (resource shortage not contemplated)
+                    # Duplication detected
                     status = DMStatus.ST_DUP_ADDR
 
         # Fill and return the response
@@ -663,7 +662,7 @@ class Res_B_BA_uni(resource.Resource):
         )
 
         # See if we have this DUA in our table
-        entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
+        src_rloc, entry_eid, _, dad = DUA_HNDLR.find_eid(dua)
 
         # 9.4.8.2.8 Receipt of Backbone Answer BB.ans
         if not rloc16:
@@ -680,7 +679,10 @@ class Res_B_BA_uni(resource.Resource):
                     # Duplication detected during DAD
                     DUA_HNDLR.duplicated_found(dua, delete=True)
                     # Send ADDR_ERR.ntf
-                    asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
+                    asyncio.ensure_future(
+                        DUA_HNDLR.send_addr_err(src_rloc, aiocoap.CON, dua, entry_eid)
+                    )
+
         else:
             # Send ADDR_NTF.ans
             bbr_rloc16 = ipaddress.IPv6Address(db.get('ncp_rloc')).packed[-2:]
@@ -725,16 +727,15 @@ class Res_B_BA_multi(resource.Resource):
         )
 
         # Se if we have this DUA in our table
-        entry_eid, entry_elapsed, _ = DUA_HNDLR.find_eid(dua)
+        _, entry_eid, entry_elapsed, _ = DUA_HNDLR.find_eid(dua)
 
         # 9.4.8.2.4 Receipt of Proactive Backbone Notification PRO_BB.ntf Multicast
         if not entry_eid:
             # TODO: 9.4.8.2.9 Caching DUAs Advertised on the Backbone Link
             return COAP_NO_RESPONSE
         elif entry_eid == eid:
+            # Case 1: ML-EID IID matches
             if entry_elapsed < elapsed:
-                # This DUA is still registered somewhere else
-                DUA_HNDLR.duplicated_found(dua, delete=False)
                 # Send PRO_BB.ntf
                 asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(dua))
             else:
@@ -742,10 +743,13 @@ class Res_B_BA_multi(resource.Resource):
                 # Remove silently
                 DUA_HNDLR.remove_entry(dua=dua)
         else:
-            # Duplication detected during DAD
-            DUA_HNDLR.duplicated_found(dua, delete=True)
+            # Case 2: ML-EID IID does not match (that is, duplicate address detected)
+            DUA_HNDLR.remove_entry(dua=dua)
             # Send ADDR_ERR.ntf
-            asyncio.ensure_future(DUA_HNDLR.send_addr_err(dua, entry_eid, eid))
+            # Special KiBRA-KiNOS message that triggers a multicast ADDR_ERR.ntf
+            asyncio.ensure_future(
+                DUA_HNDLR.send_addr_err(db.get('ncp_rloc'), aiocoap.NON, dua, entry_eid)
+            )
 
         # No ACK
         return COAP_NO_RESPONSE
@@ -778,7 +782,7 @@ class Res_A_AQ(resource.Resource):
             return COAP_NO_RESPONSE
 
         # See if this DUA is registered by this BBR
-        eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
+        _, eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
 
         # If the DUA is registered, the owner will respond to the query
         if eid and not dad:
@@ -825,7 +829,7 @@ class Res_A_AE(resource.Resource):
             return COAP_NO_RESPONSE
 
         # Remove entry if it's registered with different EID
-        entry_eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
+        _, entry_eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
         if not dad and entry_eid != eid:
             DUA_HNDLR.remove_entry(dua=dua)
 
@@ -913,7 +917,10 @@ class COAPSERVER(Ktask):
             CoapServer(
                 addr='ff03::2',
                 port=DEFS.PORT_MM,
-                resources=[(URI.tuple(URI.A_AQ), Res_A_AQ())],
+                resources=[
+                    (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                    (URI.tuple(URI.A_AE), Res_A_AE()),
+                ],
                 iface=db.get('interior_ifnumber'),
             )
         )
