@@ -100,6 +100,7 @@ class DUAEntry:
         self.reg_time = datetime.datetime.now().timestamp()
 
         # Indicates DAD is in progress
+        # TODO: this could be optimized by using src_rloc as DAD flag
         self.dad = True
 
         # Indicates that the entry should be deleted after the DAD process
