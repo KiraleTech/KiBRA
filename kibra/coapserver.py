@@ -681,7 +681,7 @@ class Res_B_BA_uni(resource.Resource):
                     DUA_HNDLR.duplicated_found(dua, delete=True)
                     # Send ADDR_ERR.ntf
                     asyncio.ensure_future(
-                        DUA_HNDLR.send_addr_err(src_rloc, aiocoap.CON, dua, entry_eid)
+                        DUA_HNDLR.send_addr_err(src_rloc, aiocoap.CON, dua, eid)
                     )
 
         else:
@@ -749,7 +749,7 @@ class Res_B_BA_multi(resource.Resource):
             # Send ADDR_ERR.ntf
             # Special KiBRA-KiNOS message that triggers a multicast ADDR_ERR.ntf
             asyncio.ensure_future(
-                DUA_HNDLR.send_addr_err(db.get('ncp_rloc'), aiocoap.NON, dua, entry_eid)
+                DUA_HNDLR.send_addr_err(db.get('ncp_rloc'), aiocoap.NON, dua, eid)
             )
 
         # No ACK
