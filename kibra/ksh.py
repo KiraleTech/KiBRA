@@ -409,6 +409,11 @@ class SERIAL(Ktask):
                 dp=dp,
             )
 
+            # Start as Secondary (KiNOS will notify the change to Primary)
+            db.set('bbr_status', 'secondary')
+            logging.info('This BBR is now Secondary.')
+
+            # Announce service
             bbr_dataset_update()
 
             # Mark prefix as active
