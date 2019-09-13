@@ -126,6 +126,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '--clear', required=False, action='store_true', help='clear topology'
     )
+    parser.add_argument(
+        '--version', action='version', version='%s' % kibra.__version__
+    )
     args = parser.parse_args()
 
     # Configure logging
