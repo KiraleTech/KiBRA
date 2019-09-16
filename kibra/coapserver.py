@@ -113,7 +113,7 @@ class DUAEntry:
 class MulticastHandler:
     def __init__(self):
         # Volatile multicast addresses list
-        self.maddrs = db.get('mlr_cache')
+        self.maddrs = {}
 
         # Load presistent addresses
         maddrs_perm = db.get('maddrs_perm')
