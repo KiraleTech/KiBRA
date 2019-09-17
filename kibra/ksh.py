@@ -180,8 +180,7 @@ def _configure():
         send_cmd('ifup')
     elif dongle_status == 'joined':
         send_cmd('ifdown')
-        _enable_br()
-        send_cmd('ifup')
+        _configure()
     else:  # Other 'none' statuses
         logging.warning('Dongle status was "%s".' % dongle_status)
         send_cmd('clear')
