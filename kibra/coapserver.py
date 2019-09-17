@@ -451,7 +451,7 @@ class DUAHandler:
             self.remove_entry(entry)
         else:
             # Announce successful registration to other BBRs
-            self.announce(entry)
+            await self.announce(entry)
 
     def duplicated_found(self, dua, delete=False):
         '''
@@ -463,15 +463,18 @@ class DUAHandler:
                 entry.dad = False
                 entry.delete = delete
 
-    def announce(self, entry):
-        # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
-
+    async def announce(self, entry):
         # Add ND Proxy neighbor
         self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
 
+        # Send PRO_BB.ntf (9.4.8.4.4)
+        asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
+
         # Send unsolicited NA
-        self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
+        for _ in range(DEFS.MAX_NEIGHBOR_ADVERTISEMENT):
+            self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
+            await asyncio.sleep(DEFS.RETRANS_TIMER)
+
 
     def remove_entry(self, entry=None, dua=None):
         if not entry:
