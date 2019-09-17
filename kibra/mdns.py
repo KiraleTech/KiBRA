@@ -190,5 +190,5 @@ class MDNS(Ktask):
         if snw != sod:
             with open(str(file_name), 'w') as file_:
                 file_.write(snw)
-            bash('service avahi-daemon restart')
+            bash('service avahi-daemon reload')
             logging.info('mDNS service updated.')

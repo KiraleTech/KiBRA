@@ -40,7 +40,8 @@ async def _master():
         # Start all tasks
         db.set('status_kibra', 'starting')
         for thread in TASKS:
-            asyncio.ensure_future(thread.run())
+            if db.get('status_' + thread.name) is not status.RUNNING:
+                asyncio.ensure_future(thread.run())
 
         # Wait until all tasks have started
         for thread in TASKS:
@@ -98,7 +99,7 @@ def _main():
     TASKS.append(DHCP())
     TASKS.append(NAT())
     TASKS.append(DNS())
-    TASKS.append(MDNS())
+    TASKS.append(mdns)
     TASKS.append(DIAGS())
     TASKS.append(COAPSERVER())
 
