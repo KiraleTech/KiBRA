@@ -464,6 +464,8 @@ class DUAHandler:
                 entry.delete = delete
 
     async def announce(self, entry):
+        '''9.4.8.2.3 DUA Registration Notifications'''
+
         # Add ND Proxy neighbor
         self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
 
@@ -471,10 +473,18 @@ class DUAHandler:
         asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
 
         # Send unsolicited NA
-        for _ in range(DEFS.MAX_NEIGHBOR_ADVERTISEMENT):
+        if kibra.__harness__ :
+            nd_na_repeats = DEFS.MAX_NEIGHBOR_ADVERTISEMENT
+        else:
+            nd_na_repeats = DEFS.CFG_NEIGHBOR_ADVERTISEMENT
+        for _ in range(nd_na_repeats):
             self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
             await asyncio.sleep(DEFS.RETRANS_TIMER)
-
+        
+        # Send repetition of PRO_BB.ntf
+        if kibra.__harness__ :
+            await asyncio.sleep(3)
+            asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
 
     def remove_entry(self, entry=None, dua=None):
         if not entry:

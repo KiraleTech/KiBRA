@@ -195,6 +195,7 @@ class DEFS:
     # Not defined by Thread
     BBR_DEF_REREG_DELAY = 6
     BBR_DEF_MLR_TIMEOUT = 3600
+    CFG_NEIGHBOR_ADVERTISEMENT = 1
 
 
 def get_prefix_based_mcast(prefix, groupid):
