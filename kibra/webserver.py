@@ -177,6 +177,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
             elif kibra.__harness__ and self.path.startswith('/duastatus'):
                 db.set('dua_next_status', req.get('sta')[0])
                 db.set('dua_next_status_eid', req.get('eid')[0])
+            elif kibra.__harness__ and self.path.startswith('/mlrstatus'):
+                db.set('mlr_next_status', req.get('sta')[0])
             elif kibra.__harness__ and self.path.startswith('/sendudp'):
                 NETWORK.send_udp(
                     req.get('dst')[0], req.get('prt')[0], req.get('pld')[0]

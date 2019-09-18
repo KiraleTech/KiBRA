@@ -72,6 +72,7 @@ DB_ITEMS = {
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mlr_cache': [dict, '{}', lambda x: True, False, False],
+    'mlr_next_status': [str, '', lambda x: True, False, False],  # Thread Harness
     'mlr_timeout': [
         int,
         DEFS.BBR_DEF_MLR_TIMEOUT,

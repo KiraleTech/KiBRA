@@ -233,11 +233,18 @@ class Res_N_MR(resource.Resource):
         in_pload = ThreadTLV.sub_tlvs_str(request.payload)
         logging.info('in %s req: %s' % (URI.N_MR, in_pload))
 
+        # Thread Harness may force response status
+        mlr_next_status = db.get('mlr_next_status')
+        if kibra.__harness__ and mlr_next_status:
+            status = int(mlr_next_status)
+            db.set('mlr_next_status', '')
         # BBR Primary/Secondary status
-        if not 'primary' in db.get('bbr_status'):
+        elif not 'primary' in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
+        # Resources shortage
         elif len(MCAST_HNDLR.maddrs) >= MULTICAST_LIMIT:
             status = DMStatus.ST_RES_SHRT
+        # Normal registration
         else:
             timeout = None
             comm_sid = None
@@ -546,6 +553,7 @@ class Res_N_DR(resource.Resource):
             if eid and dua:
                 # Thread Harness may force response status
                 if kibra.__harness__ and eid == db.get('dua_next_status_eid'):
+                    # TODO: DUA-TC-17 step 48
                     status = int(db.get('dua_next_status'))
                     db.set('dua_next_status_eid', '')
                     db.set('dua_next_status', '')
