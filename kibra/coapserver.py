@@ -553,10 +553,12 @@ class Res_N_DR(resource.Resource):
             if eid and dua:
                 # Thread Harness may force response status
                 if kibra.__harness__ and eid == db.get('dua_next_status_eid'):
-                    # TODO: DUA-TC-17 step 48
                     status = int(db.get('dua_next_status'))
                     db.set('dua_next_status_eid', '')
                     db.set('dua_next_status', '')
+                    # DUA-TC-17 step 48
+                    if status == 500:
+                        return aiocoap.Message(code=Code.INTERNAL_SERVER_ERROR)
                 elif DUA_HNDLR.reg_update(src_rloc, eid, dua, elapsed):
                     status = DMStatus.ST_SUCESS
                 else:
