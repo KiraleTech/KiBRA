@@ -238,6 +238,14 @@ class Res_N_MR(resource.Resource):
         if kibra.__harness__ and mlr_next_status:
             status = int(mlr_next_status)
             db.set('mlr_next_status', '')
+            # Include bad addresses for resources shortage status
+            if status == DMStatus.ST_NOT_PRI:
+                # IPv6 Addresses TLV
+                addrs_value = ThreadTLV.get_value(request.payload, TLV.A_IPV6_ADDRESSES)
+                if addrs_value:
+                    _, good, bad = Res_N_MR.parse_addrs(addrs_value)
+                    bad_addrs.append(good)
+                    bad_addrs.append(bad)
         # BBR Primary/Secondary status
         elif not 'primary' in db.get('bbr_status'):
             status = DMStatus.ST_NOT_PRI
@@ -480,16 +488,16 @@ class DUAHandler:
         asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
 
         # Send unsolicited NA
-        if kibra.__harness__ :
+        if kibra.__harness__:
             nd_na_repeats = DEFS.MAX_NEIGHBOR_ADVERTISEMENT
         else:
             nd_na_repeats = DEFS.CFG_NEIGHBOR_ADVERTISEMENT
         for _ in range(nd_na_repeats):
             self.ndproxy.send_na('ff02::1', entry.dua, solicited=False)
             await asyncio.sleep(DEFS.RETRANS_TIMER)
-        
+
         # Send repetition of PRO_BB.ntf
-        if kibra.__harness__ :
+        if kibra.__harness__:
             await asyncio.sleep(3)
             asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
 
