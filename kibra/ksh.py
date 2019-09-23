@@ -71,10 +71,6 @@ def ncp_fw_update():
         try:
             dfu_file = kidfu.DfuFile(str(dfu_path))
             kifwu.dfu_find_and_flash(dfu_file, unattended=True)
-            # TODO: Remove this when KiTools is fixed for a proper USB re-enumeration
-            # Reset USB device in KTBRN1
-            bash('sh -c "echo 0 > /sys/bus/usb/devices/6-1/authorized"')
-            bash('sh -c "echo 1 > /sys/bus/usb/devices/6-1/authorized"')
         except Exception as exc:
             logging.error('Problem updating NCP firmware: %s' % exc)
             sys.exit()
