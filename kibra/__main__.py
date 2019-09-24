@@ -74,7 +74,7 @@ async def _master():
         logging.info('All tasks have now stopped.')
 
 
-def _main():
+def main():
     global SERVER
 
     logging.info('Launching KiBRA v%s' % kibra.__version__)
@@ -146,6 +146,6 @@ if __name__ == '__main__':
     elif args.clear:
         topology.clear_topology()
     elif args.daemon:
-        daemonize.Daemonize(app='KiBRA', pid=PID_FILE, action=_main).start()
+        daemonize.Daemonize(app='KiBRA', pid=PID_FILE, action=main).start()
     else:
-        _main()
+        main()
