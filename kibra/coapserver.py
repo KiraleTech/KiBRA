@@ -273,7 +273,7 @@ class Res_N_MR(resource.Resource):
             # Register valid addresses
             if good_addrs:
                 if timeout and comm_sid:
-                    addr_tout = timeout
+                    addr_tout = struct.unpack('!I', timeout)[0]
                 else:
                     addr_tout = db.get('mlr_timeout') or DEFS.MIN_MLR_TIMEOUT
                 reg_addrs = []
