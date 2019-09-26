@@ -33,6 +33,8 @@ OLD_NCP_RLOC = None
 
 COAP_NO_RESPONSE = None
 
+INFINITE_TIMESTAMP = 0
+
 # Limit the number of DUA and Multicast registrations managed by this BBR
 DUA_LIMIT = 768
 MULTICAST_LIMIT = 768
@@ -115,16 +117,16 @@ class MulticastHandler:
         # Volatile multicast addresses list
         self.maddrs = {}
 
-        # Load presistent addresses
-        maddrs_perm = db.get('maddrs_perm')
-        for addr in maddrs_perm:
-            self.addr_add(addr, datetime.datetime.max)
-
         # Start the multicast routing daemon
         self.mcrouter = MCRouter()
 
         # Multicast handler CoAP client
         self.coap_client = CoapClient()
+
+        # Load presistent addresses
+        maddrs_perm = db.get('maddrs_perm')
+        for addr in maddrs_perm:
+            self.addr_add(addr, 0xFFFFFFFF)
 
     def stop(self):
         if self.coap_client is not None:
@@ -143,15 +145,13 @@ class MulticastHandler:
 
     def addr_add(self, addr, addr_tout):
         if addr_tout == 0xFFFFFFFF:
-            tout = datetime.datetime.max
+            tout = INFINITE_TIMESTAMP
             # Save the address in the presistent list
             maddrs_perm = db.get('maddrs_perm')
             if addr not in maddrs_perm:
                 maddrs_perm.append(addr)
                 db.set('maddrs_perm', maddrs_perm)
         else:
-            if addr_tout < DEFS.MIN_MLR_TIMEOUT:
-                addr_tout = DEFS.MIN_MLR_TIMEOUT
             tout = datetime.datetime.now().timestamp() + addr_tout
 
         # Join the multicast group in the external interface for MLDv2 handling
@@ -161,9 +161,11 @@ class MulticastHandler:
         # Save the new address in the volatile list
         self.maddrs[addr] = tout
 
-        logging.info(
-            'Multicast address %s registration updated (+%d s)' % (addr, addr_tout)
-        )
+        if addr_tout == 0xFFFFFFFF:
+            how_long = 'permanently'
+        else:
+            how_long = '(+%d s)' % addr_tout
+        logging.info('Multicast address %s registration updated %s' % (addr, how_long))
 
     def addr_remove(self, addr):
 
@@ -189,7 +191,11 @@ class MulticastHandler:
 
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
-        rem_list = [addr for addr, tout in self.maddrs.items() if tout < now]
+        rem_list = [
+            addr
+            for addr, tout in self.maddrs.items()
+            if tout != INFINITE_TIMESTAMP and tout < now
+        ]
         for addr in rem_list:
             self.addr_remove(addr)
 

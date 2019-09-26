@@ -68,7 +68,7 @@ DB_ITEMS = {
         False,
         False,
     ],
-    'maddrs_perm': [list, '[]', lambda x: True, False, False],
+    'maddrs_perm': [list, '[]', lambda x: True, False, True],
     'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
     'mlr_cache': [dict, '{}', lambda x: True, False, False],
