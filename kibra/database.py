@@ -156,6 +156,9 @@ def set(key, value):
         if key not in CFG or CFG[key] is not value:
             CFG[key] = value
             logging.debug('Saving %s as %s.', key, value)
+            # If the item is flagged as persistent, save to disk
+            if DB_ITEMS[key][DB_ITEMS_PERS]:
+                save()
 
 
 def delete(key):

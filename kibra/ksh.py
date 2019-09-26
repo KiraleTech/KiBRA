@@ -211,9 +211,6 @@ def bbr_dataset_update():
     # Store used values
     db.set('bbr_seq', bbr_sequence_number)
 
-    # Make them persistent
-    db.save()
-
     # Enable BBR
     send_cmd(
         'config service add %u %s %s'
