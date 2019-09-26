@@ -913,16 +913,19 @@ class COAPSERVER(Ktask):
         # Launch CoAP servers
         self.coap_servers = []
 
+        resources = [(URI.tuple(URI.N_MR), Res_N_MR())]
+        if db.get('prefix_dua'):
+            resources += [
+                (URI.tuple(URI.N_DR), Res_N_DR()),
+                (URI.tuple(URI.A_AE), Res_A_AE()),
+            ]
+
         # Bind to RLOC
         self.coap_servers.append(
             CoapServer(
                 addr=db.get('ncp_rloc'),
                 port=DEFS.PORT_MM,
-                resources=[
-                    (URI.tuple(URI.N_DR), Res_N_DR()),
-                    (URI.tuple(URI.N_MR), Res_N_MR()),
-                    (URI.tuple(URI.A_AE), Res_A_AE()),
-                ],
+                resources=resources,
                 iface=db.get('interior_ifnumber'),
             )
         )
@@ -932,27 +935,7 @@ class COAPSERVER(Ktask):
             CoapServer(
                 addr=db.get('interior_ipv6_ll'),
                 port=DEFS.PORT_MM,
-                resources=[
-                    (
-                        URI.tuple(URI.N_DR),
-                        Res_N_DR(),
-                    ),  # Only for own NCP and MTD children
-                    (URI.tuple(URI.N_MR), Res_N_MR()),
-                    (URI.tuple(URI.A_AE), Res_A_AE()),
-                ],
-                iface=db.get('interior_ifnumber'),
-            )
-        )
-
-        # Bind to Realm-Local All-Routers
-        self.coap_servers.append(
-            CoapServer(
-                addr='ff03::2',
-                port=DEFS.PORT_MM,
-                resources=[
-                    (URI.tuple(URI.A_AQ), Res_A_AQ()),
-                    (URI.tuple(URI.A_AE), Res_A_AE()),
-                ],
+                resources=resources,
                 iface=db.get('interior_ifnumber'),
             )
         )
@@ -967,28 +950,42 @@ class COAPSERVER(Ktask):
             )
         )
 
-        # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('all_domain_bbrs'),
-                port=db.get('bbr_port'),
-                resources=[
-                    (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
-                ],
-                iface=db.get('exterior_ifnumber'),
+        if db.get('prefix_dua'):
+            # Bind to Realm-Local All-Routers
+            self.coap_servers.append(
+                CoapServer(
+                    addr='ff03::2',
+                    port=DEFS.PORT_MM,
+                    resources=[
+                        (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                        (URI.tuple(URI.A_AE), Res_A_AE()),
+                    ],
+                    iface=db.get('interior_ifnumber'),
+                )
             )
-        )
 
-        # Bind Res_B_BA to exterior link-local
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('exterior_ipv6_ll'),
-                port=db.get('bbr_port'),
-                resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
-                iface=db.get('exterior_ifnumber'),
+            # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
+            self.coap_servers.append(
+                CoapServer(
+                    addr=db.get('all_domain_bbrs'),
+                    port=db.get('bbr_port'),
+                    resources=[
+                        (URI.tuple(URI.B_BQ), Res_B_BQ()),
+                        (URI.tuple(URI.B_BA), Res_B_BA_multi()),
+                    ],
+                    iface=db.get('exterior_ifnumber'),
+                )
             )
-        )
+
+            # Bind Res_B_BA to exterior link-local
+            self.coap_servers.append(
+                CoapServer(
+                    addr=db.get('exterior_ipv6_ll'),
+                    port=db.get('bbr_port'),
+                    resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
+                    iface=db.get('exterior_ifnumber'),
+                )
+            )
 
     def kstop(self):
         logging.info('Stopping CoAP servers')
