@@ -124,9 +124,7 @@ class MulticastHandler:
         self.coap_client = CoapClient()
 
         # Load presistent addresses
-        maddrs_perm = db.get('maddrs_perm')
-        for addr in maddrs_perm:
-            self.addr_add(addr, 0xFFFFFFFF)
+        self.maddr_perm_load()
 
     def stop(self):
         if self.coap_client is not None:
@@ -147,12 +145,11 @@ class MulticastHandler:
         if addr_tout == 0xFFFFFFFF:
             tout = INFINITE_TIMESTAMP
             # Save the address in the presistent list
-            maddrs_perm = db.get('maddrs_perm')
-            if addr not in maddrs_perm:
-                maddrs_perm.append(addr)
-                db.set('maddrs_perm', maddrs_perm)
+            self.addr_perm_add(addr)
         else:
             tout = datetime.datetime.now().timestamp() + addr_tout
+            # Remove the address from the presistent list (if it exists)
+            self.addr_perm_remove(addr)
 
         # Join the multicast group in the external interface for MLDv2 handling
         if addr not in self.maddrs.keys():
@@ -166,7 +163,7 @@ class MulticastHandler:
         else:
             how_long = '(+%d s)' % addr_tout
         logging.info('Multicast address %s registration updated %s' % (addr, how_long))
-
+    
     def addr_remove(self, addr):
 
         # Remove the address from the volatile list
@@ -176,10 +173,7 @@ class MulticastHandler:
         db.set('mlr_cache', self.maddrs)
 
         # Remove the address from the presistent list
-        maddrs_perm = db.get('maddrs_perm')
-        if addr in maddrs_perm:
-            maddrs_perm.pop(addr)
-            db.set('maddrs_perm', maddrs_perm)
+        self.addr_perm_remove(addr)
 
         # Remove the existing multicast routes for this address
         self.mcrouter.rem_group_routes(addr)
@@ -188,6 +182,23 @@ class MulticastHandler:
         self.mcrouter.join_leave_group('leave', addr)
 
         logging.info('Multicast address %s registration removed.' % addr)
+    
+    def maddr_perm_load(self):
+        maddrs_perm = db.get('maddrs_perm')
+        for addr in maddrs_perm:
+            self.addr_add(addr, 0xFFFFFFFF)
+
+    def addr_perm_add(self, addr):
+        maddrs_perm = db.get('maddrs_perm')
+        if addr not in maddrs_perm:
+            maddrs_perm.append(addr)
+            db.set('maddrs_perm', maddrs_perm)
+
+    def addr_perm_remove(self, addr):
+        maddrs_perm = db.get('maddrs_perm')
+        if addr in maddrs_perm:
+            maddrs_perm.remove(addr)
+            db.set('maddrs_perm', maddrs_perm)
 
     def reg_periodic(self):
         now = datetime.datetime.now().timestamp()
