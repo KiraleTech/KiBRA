@@ -231,6 +231,9 @@ def assign_addr(addr):
                 DHCP.dhcp_server_start()
                 IPTABLES.handle_diag('D', old_ncp_rloc)
                 IPTABLES.handle_diag('I', addr)
+                for ext_addr in db.get('exterior_addrs'):
+                    IPTABLES.handle_bagent_fwd(ext_addr, old_ncp_rloc, enable=False)
+                    IPTABLES.handle_bagent_fwd(ext_addr, addr, enable=True)
         # ML-EID
         else:
             logging.info('ML-EID address is %s', addr)
@@ -432,13 +435,13 @@ class NETWORK(Ktask):
         # Remove old addresses
         for addr in old_addrs:
             NAT.handle_nat64_masking(addr, enable=False)
-            IPTABLES.handle_bagent_fwd(addr, enable=False)
+            IPTABLES.handle_bagent_fwd(addr, db.get('ncp_rloc'), enable=False)
 
         # Add new addresses
         for addr in new_addrs:
             # TODO: except link local
             NAT.handle_nat64_masking(addr, enable=True)
-            IPTABLES.handle_bagent_fwd(addr, enable=True)
+            IPTABLES.handle_bagent_fwd(addr, db.get('ncp_rloc'), enable=True)
 
         # Notify MDNS service
         if new_addrs:

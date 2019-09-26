@@ -185,7 +185,7 @@ def block_local_multicast(action, maddr):
     bash('ip6tables -w -t filter -%s INPUT -s %s -d %s -j DROP' % (action, src, maddr))
 
 
-def handle_bagent_fwd(ext_addr, enable=True):
+def handle_bagent_fwd(ext_addr, int_addr, enable=True):
     '''Enable or disable Border Agent traffic forwarding between one exterior 
     address and the NCP, using Jool for IPv6 and iptables for IPv6'''
 
@@ -199,7 +199,6 @@ def handle_bagent_fwd(ext_addr, enable=True):
     ipt_action = 'I' if enable else 'D'
     ipt_bin = 'iptables' if is_ipv4 else 'ip6tables'
     ext_ifame = db.get('exterior_ifname')
-    int_addr = db.get('ncp_rloc')
     ext_port = db.get('exterior_port_mc')
     int_port = db.get('bagent_port')
     brdg_mark = db.get('bridging_mark')
@@ -222,3 +221,5 @@ def handle_bagent_fwd(ext_addr, enable=True):
         '%s -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'
         % params
     )
+
+    logging.info('Border Agent forwarding updated.')
