@@ -7,19 +7,19 @@ import kibra
 import kibra.database as db
 import kibra.iptables as IPTABLES
 import kibra.network as NETWORK
+import kibra.thread as THREAD
 from kibra.coapclient import CoapClient
 from kibra.ktask import Ktask
-from kibra.thread import DEFS, TLV, URI
 from kibra.tlv import ThreadTLV
 
 VALUES = [
-    TLV.D_MAC_ADDRESS,
-    TLV.D_ROUTE64,
-    TLV.D_LEADER_DATA,
-    TLV.D_IPV6_ADRESS_LIST,
-    TLV.D_CHILD_TABLE,
+    THREAD.TLV.D_MAC_ADDRESS,
+    THREAD.TLV.D_ROUTE64,
+    THREAD.TLV.D_LEADER_DATA,
+    THREAD.TLV.D_IPV6_ADRESS_LIST,
+    THREAD.TLV.D_CHILD_TABLE,
 ]
-PET_DIAGS = ThreadTLV(t=TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
+PET_DIAGS = ThreadTLV(t=THREAD.TLV.D_TYPE_LIST, l=len(VALUES), v=VALUES).array()
 
 NODE_INACTIVE_MS = 90000
 
@@ -68,13 +68,13 @@ class DIAGS(Ktask):
 
         # Diags
         response = await self.petitioner.con_request(
-            self.br_permanent_addr, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
+            self.br_permanent_addr, THREAD.DEFS.PORT_MM, THREAD.URI.D_DG, PET_DIAGS
         )
         if not response:
             return
 
         # Save BR RLOC16
-        rloc16 = ThreadTLV.get_value(response, TLV.D_MAC_ADDRESS)
+        rloc16 = ThreadTLV.get_value(response, THREAD.TLV.D_MAC_ADDRESS)
         if rloc16:
             self.br_rloc16 = '%02x%02x' % (rloc16[0], rloc16[1])
 
@@ -92,11 +92,9 @@ class DIAGS(Ktask):
                 for rloc16 in self.nodes_list:
                     if rloc16 == self.br_rloc16:
                         continue
-                    node_rloc = NETWORK.get_rloc_from_short(
-                        db.get('ncp_prefix'), rloc16
-                    )
+                    node_rloc = THREAD.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
                     response = await self.petitioner.con_request(
-                        node_rloc, DEFS.PORT_MM, URI.D_DG, PET_DIAGS
+                        node_rloc, THREAD.DEFS.PORT_MM, THREAD.URI.D_DG, PET_DIAGS
                     )
                     self._parse_diags(response)
                     time.sleep(0.2)
@@ -112,7 +110,7 @@ class DIAGS(Ktask):
         leader_rloc16 = None
 
         # Address16 TLV
-        value = ThreadTLV.get_value(tlvs, TLV.D_MAC_ADDRESS)
+        value = ThreadTLV.get_value(tlvs, THREAD.TLV.D_MAC_ADDRESS)
         if value:
             json_node_info['rloc16'] = '%02x%02x' % (value[0], value[1])
             if value[1] == 0:
@@ -123,7 +121,7 @@ class DIAGS(Ktask):
             return
 
         # Route 64 TLV
-        value = ThreadTLV.get_value(tlvs, TLV.D_ROUTE64)
+        value = ThreadTLV.get_value(tlvs, THREAD.TLV.D_ROUTE64)
         if value:
             router_id_mask = bin(int.from_bytes(value[1:9], byteorder='big'))
             router_ids = [
@@ -149,12 +147,12 @@ class DIAGS(Ktask):
                     json_node_info['id'] = '%u' % router_id
 
         # Leader Data TLV
-        value = ThreadTLV.get_value(tlvs, TLV.D_LEADER_DATA)
+        value = ThreadTLV.get_value(tlvs, THREAD.TLV.D_LEADER_DATA)
         if value:
             leader_rloc16 = '%04x' % (value[7] << 10)
 
         # IPv6 Address List TLV
-        value = ThreadTLV.get_value(tlvs, TLV.D_IPV6_ADRESS_LIST)
+        value = ThreadTLV.get_value(tlvs, THREAD.TLV.D_IPV6_ADRESS_LIST)
         if value:
             addresses = [value[i : i + 16] for i in range(0, len(value), 16)]
             for addr in addresses:
@@ -165,7 +163,7 @@ class DIAGS(Ktask):
 
         # Now process child info, because json_node_info['rloc16'] is needed
         # Child Table TLV
-        value = ThreadTLV.get_value(tlvs, TLV.D_CHILD_TABLE)
+        value = ThreadTLV.get_value(tlvs, THREAD.TLV.D_CHILD_TABLE)
         if value:
             children = [value[i : i + 3] for i in range(0, len(value), 3)]
             for child in children:
