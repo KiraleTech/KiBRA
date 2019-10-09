@@ -24,4 +24,4 @@ def bash(command):
             print('%s%s%s' % (Fore.MAGENTA, stdout, Fore.RESET))
         '''
         logging.info(stdout)
-        return stdout
+        return stdout.value()
