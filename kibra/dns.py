@@ -50,7 +50,7 @@ class DNS(Ktask):
         # TODO: https://www.claudiokuenzler.com/blog/694/get-unbount-dns-lookups-resolution-working-ubuntu-16.04-xenial
         # Stop DNS daemon
         bash('service %s stop' % DNS_DAEMON)
-        # Remove previous configuration for this dongle
+        # Remove previous configuration for this NCP
         db.del_from_file(DNS_CONFIG, '\nserver:', '\n    dns64-synthall: yes\n')
         # Allow for the file to be stored
         sleep(0.2)

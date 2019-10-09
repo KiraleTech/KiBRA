@@ -215,7 +215,7 @@ def handle_bagent_fwd(ext_addr, int_addr, enable=True):
             % params
         )
 
-    # Mark MC packets before they are translated, so they are not consumed by Linux but by the dongle
+    # Mark MC packets before they are translated, so they are not consumed by Linux but by the NCP
     params = (ipt_bin, ipt_action, ext_ifame, ext_addr, ext_port, brdg_mark)
     bash(
         '%s -w -t mangle -%s PREROUTING -i %s -d %s -p udp --dport %d -j MARK --set-mark %s'

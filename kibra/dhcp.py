@@ -26,7 +26,7 @@ def dhcp_server_start():
 
     # Stop DHCP daemon
     bash(DHCP_DAEMON + ' stop')
-    # Remove previous configuration for this dongle
+    # Remove previous configuration for this NCP
     db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
     # Add new configuration
     with open(DHCP_CONFIG, 'w') as file_:
@@ -59,7 +59,7 @@ def dhcp_server_stop():
         
     # Stop DHCP daemon
     bash(DHCP_DAEMON + ' stop')
-    # Remove previous configuration for this dongle
+    # Remove previous configuration for this NCP
     db.del_from_file(DHCP_CONFIG, '\niface %s' % db.get('interior_ifname'), '\n}\n')
     # Allow for the file to be stored
     time.sleep(0.2)

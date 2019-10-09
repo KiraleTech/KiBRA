@@ -735,7 +735,7 @@ class Res_B_BA_uni(resource.Resource):
         else:
             # Send ADDR_NTF.ans
             bbr_rloc16 = ipaddress.IPv6Address(db.get('ncp_rloc')).packed[-2:]
-            # If this BBR dongle originated the addr_qry, send addr_ntf to its
+            # If this BBR NCP originated the addr_qry, send addr_ntf to its
             # link local address
             if rloc16 == bbr_rloc16:
                 dst = db.get('ncp_ll')
@@ -911,7 +911,7 @@ class COAPSERVER(Ktask):
         db.set('all_network_bbrs', all_network_bbrs)
         logging.info('Joining All Network BBRs group: %s' % all_network_bbrs)
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
-        # TODO: update it if dongle_prefix changes
+        # TODO: update it if ncp_prefix changes
 
         if db.get('prefix_dua'):
             # Set All Domain BBRs multicast address as per 9.4.8.1

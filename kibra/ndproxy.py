@@ -165,11 +165,11 @@ class NDProxy:
             self.duas[dua] = reg_time
 
             # Establish route
-            NETWORK.dongle_route_enable(dua)
+            NETWORK.ncp_route_enable(dua)
         else:
             try:
                 # Remove route
-                NETWORK.dongle_route_disable(dua)
+                NETWORK.ncp_route_disable(dua)
 
                 # Remove DUA from the list
                 self.duas.pop(dua)

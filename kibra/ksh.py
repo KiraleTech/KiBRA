@@ -120,7 +120,7 @@ def enable_ncp():
             enable_ncp()
 
 
-def _dongle_apply_config():
+def _ncp_apply_config():
     # Config network parameters
     if 'ncp_emac' in db.CFG:
         send_cmd('config emac %s' % db.get('ncp_emac'))
@@ -134,51 +134,51 @@ def _dongle_apply_config():
     if 'ncp_prefix' in db.CFG:
         send_cmd('config mlprefix %s' % db.get('ncp_prefix').split('/')[0])
     if 'ncp_channel' in db.CFG:
-        logging.info('Configure dongle channel %s.', db.get('ncp_channel'))
+        logging.info('Configure NCP channel %s.', db.get('ncp_channel'))
         send_cmd('config channel %s' % db.get('ncp_channel'))
     if 'ncp_panid' in db.CFG:
-        logging.info('Configure dongle panid %s.', db.get('ncp_panid'))
+        logging.info('Configure NCP panid %s.', db.get('ncp_panid'))
         send_cmd('config panid %s' % db.get('ncp_panid'))
     if 'ncp_netname' in db.CFG:
-        logging.info('Configure dongle network name %s.', db.get('ncp_netname'))
+        logging.info('Configure NCP network name %s.', db.get('ncp_netname'))
         send_cmd('config netname "%s"' % db.get('ncp_netname'))
     if 'ncp_commcred' in db.CFG:
         logging.info(
-            'Configure dongle comissioner credential %s.', db.get('ncp_commcred')
+            'Configure NCP comissioner credential %s.', db.get('ncp_commcred')
         )
         send_cmd('config commcred "%s"' % db.get('ncp_commcred'))
 
     # Set role
     role = db.get('ncp_role')
-    logging.info('Set dongle as %s.', role)
+    logging.info('Set NCP as %s.', role)
     send_cmd('config role %s' % role)
 
 
 def _configure():
     global SERIAL_DEV
 
-    # Wait for the dongle to reach a steady status
-    logging.info('Waiting until dongle is steady...')
-    dongle_status = 'disconnected'
-    while not ('none' in dongle_status or 'joined' in dongle_status):
-        dongle_status = send_cmd('show status')[0]
+    # Wait for the NCP to reach a steady status
+    logging.info('Waiting until NCP is steady...')
+    ncp_status = 'disconnected'
+    while not ('none' in ncp_status or 'joined' in ncp_status):
+        ncp_status = send_cmd('show status')[0]
         time.sleep(1)
-    db.set('ncp_status', dongle_status)
+    db.set('ncp_status', ncp_status)
 
-    # Different actions according to dongle status
-    if dongle_status == 'none':
+    # Different actions according to NCP status
+    if ncp_status == 'none':
         if not kibra.__harness__:
-            _dongle_apply_config()
+            _ncp_apply_config()
         _enable_br()
         send_cmd('ifup')
-    elif dongle_status == 'none - saved configuration':
+    elif ncp_status == 'none - saved configuration':
         _enable_br()
         send_cmd('ifup')
-    elif dongle_status == 'joined':
+    elif ncp_status == 'joined':
         send_cmd('ifdown')
         _configure()
     else:  # Other 'none' statuses
-        logging.warning('Dongle status was "%s".' % dongle_status)
+        logging.warning('Dongle status was "%s".' % ncp_status)
         send_cmd('clear')
         SERIAL_DEV.wait_for('status', 'none')
         _configure()
@@ -386,7 +386,7 @@ class SERIAL(Ktask):
             _bagent_on()
 
             # Add route
-            NETWORK.dongle_route_enable(db.get('prefix'))
+            NETWORK.ncp_route_enable(db.get('prefix'))
 
             # Announce prefix to the network
             prefix_handle(

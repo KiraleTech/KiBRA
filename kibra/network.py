@@ -152,9 +152,9 @@ def set_ext_iface():
     db.set('exterior_mac', IPR.get_links(idx)[0].get_attr('IFLA_ADDRESS'))
 
 
-def dongle_conf():
+def ncp_conf():
     '''Configure several network parameters'''
-    # By Kirale convention, interior MAC address is obtained from the dongle
+    # By Kirale convention, interior MAC address is obtained from the NCP
     # serial
     serial = db.get('ncp_serial').split('+')[-1]
     interior_mac = ':'.join(
@@ -168,10 +168,10 @@ def dongle_conf():
         ]
     )
     db.set('interior_mac', interior_mac)
-    # Also dongle MAC is related to interior MAC
-    dongle_mac = bytearray.fromhex(interior_mac.replace(':', ''))
-    dongle_mac[0] |= 0x02
-    db.set('ncp_mac', ':'.join(['%02x' % byte for byte in dongle_mac]))
+    # Also NCP MAC is related to interior MAC
+    ncp_mac = bytearray.fromhex(interior_mac.replace(':', ''))
+    ncp_mac[0] |= 0x02
+    db.set('ncp_mac', ':'.join(['%02x' % byte for byte in ncp_mac]))
     # Find the device with the configured MAC address
     links = IPR.get_links(IFLA_ADDRESS=db.get('interior_mac').lower())
     if links:
@@ -239,7 +239,7 @@ def assign_addr(addr):
             logging.info('ML-EID address is %s', addr)
             db.set('ncp_mleid', addr)
 
-    # Add dongle neighbour
+    # Add NCP neighbour
     IPR.neigh(
         'replace',
         family=socket.AF_INET6,
@@ -289,7 +289,7 @@ def _ifup():
     rules = IPR.get_rules(family=socket.AF_INET6)
 
     # Make marked packets use the custom table
-    # TODO: different priorities for different dongles
+    # TODO: different priorities for different NCPs
     if str(db.get('bridging_mark')) not in str(rules):
         IPR.rule(
             'add',
@@ -360,7 +360,7 @@ def _ifdown():
         logging.error('Exception bringing %s interface down.', ifname)
 
 
-def dongle_route_enable(prefix):
+def ncp_route_enable(prefix):
     try:
         IPR.route(
             'replace',
@@ -373,7 +373,7 @@ def dongle_route_enable(prefix):
         logging.warning('Route for %s could not be enabled', prefix)
 
 
-def dongle_route_disable(prefix):
+def ncp_route_disable(prefix):
     try:
         IPR.route(
             'del', family=socket.AF_INET6, dst=prefix, oif=db.get('interior_ifnumber')
@@ -396,7 +396,7 @@ class NETWORK(Ktask):
         self.syslog = None
 
     def kstart(self):
-        dongle_conf()
+        ncp_conf()
         _ifup()
         IPTABLES.handle_ipv6('A')
 

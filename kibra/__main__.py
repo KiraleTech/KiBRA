@@ -85,7 +85,7 @@ def main():
     # Exterior network configuration
     global_netconfig()
 
-    # Find connected dongle
+    # Find connected NCP
     enable_ncp()
 
     # Start web interface
@@ -101,6 +101,7 @@ def main():
     TASKS.append(DNS())
     TASKS.append(mdns)
     TASKS.append(DIAGS())
+    # TODO: don't launch if not connected to backbone link
     TASKS.append(COAPSERVER())
 
     # Launch mDNS already

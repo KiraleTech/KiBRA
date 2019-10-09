@@ -10,15 +10,15 @@ TIMEOUT = 240
 
 def _get_devices(br_serial):
     logging.info('Looking for devices...')
-    dongles = []
+    ncps = []
     brouter = kiserial.find_devices(has_br=True, has_snum=br_serial)[0]
     brouter = kiserial.KiSerial(brouter.port, debug=kiserial.KiDebug(1))
     devices = kiserial.find_devices()
     for dev in devices:
         if not dev.snum in br_serial:
-            dongles.append(kiserial.KiSerial(dev.port, debug=kiserial.KiDebug(1)))
-    logging.info('%d devices found' % len(dongles))
-    return brouter, dongles
+            ncps.append(kiserial.KiSerial(dev.port, debug=kiserial.KiDebug(1)))
+    logging.info('%d devices found' % len(ncps))
+    return brouter, ncps
 
 
 def _str2bin(s):
@@ -94,13 +94,13 @@ def _stop_topology(dev):
 
 def form_topology():
     db.load()
-    brouter, dongles = _get_devices(db.get('ncp_serial'))
+    brouter, ncps = _get_devices(db.get('ncp_serial'))
     threads = []
 
     oobcom = _get_oobcom(brouter)
     if oobcom:
         oobcom['timeout'] = TIMEOUT
-        for device in dongles:
+        for device in ncps:
             mac = device.ksh_cmd('show eui64', True)[0]
             device.set_mac(mac)
             # oobcom['actstamp'] = _get_atimestamp()
@@ -113,8 +113,8 @@ def form_topology():
 
 def clear_topology():
     db.load()
-    _, dongles = _get_devices(db.get('ncp_serial'))
+    _, ncps = _get_devices(db.get('ncp_serial'))
     threads = []
 
-    for device in dongles:
+    for device in ncps:
         threads.append(Thread(target=_stop_topology, args=[device]))

@@ -43,13 +43,13 @@ def get_records():
     bitmap |= mode << CONNECTION_MODE
 
     # Thread interface status
-    dongle_status = db.get('ncp_status') or ''
-    if 'joined' in dongle_status:
+    ncp_status = db.get('ncp_status') or ''
+    if 'joined' in ncp_status:
         status = IFACE_UP
         if mode == DTLS_PSKC:
             records['nn'] = db.get('ncp_netname')
             records['xp'] = db.get('ncp_xpanid').replace('0x', '')
-    elif 'none - saved configuration' in dongle_status:
+    elif 'none - saved configuration' in ncp_status:
         status = IFACE_CFG
         if mode == DTLS_PSKC:
             records['nn'] = db.get('ncp_netname')
