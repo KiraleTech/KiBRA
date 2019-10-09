@@ -830,13 +830,6 @@ class Res_A_AQ(resource.Resource):
         if dua.packed[:8] != dua_prefix.packed[:8]:
             return COAP_NO_RESPONSE
 
-        # See if this DUA is registered by this BBR
-        _, eid, _, dad = DUA_HNDLR.find_eid(dua.compressed)
-
-        # If the DUA is registered, the owner will respond to the query
-        if eid and not dad:
-            return COAP_NO_RESPONSE
-
         # Obtain the RLOC16 from the source's RLOC
         rloc16 = ipaddress.IPv6Address(request.remote.sockaddr[0]).packed[-2:]
 
