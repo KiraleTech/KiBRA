@@ -369,7 +369,7 @@ class DUAHandler:
             old_entry.update(elapsed)
             # Keep other BBRs updated
             if not old_entry.dad:
-                self.announce(entry)
+                asyncio.ensure_future(self.announce(entry))
         else:
             # New entry
             new_entry = DUAEntry(src_rloc, eid, dua)
@@ -502,7 +502,7 @@ class DUAHandler:
         self.ndproxy.add_del_dua('add', entry.dua, entry.reg_time)
 
         # Send PRO_BB.ntf (9.4.8.4.4)
-        asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
+        await DUA_HNDLR.send_pro_bb_ntf(entry.dua)
 
         # Send unsolicited NA
         if kibra.__harness__:
@@ -516,7 +516,7 @@ class DUAHandler:
         # Send repetition of PRO_BB.ntf
         if kibra.__harness__:
             await asyncio.sleep(3)
-            asyncio.ensure_future(DUA_HNDLR.send_pro_bb_ntf(entry.dua))
+            await DUA_HNDLR.send_pro_bb_ntf(entry.dua)
 
     def remove_entry(self, entry=None, dua=None):
         if not entry:
