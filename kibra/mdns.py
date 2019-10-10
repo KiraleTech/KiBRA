@@ -75,7 +75,7 @@ def get_records():
     records['sb'] = struct.pack('!I', bitmap).hex()
     records['vn'] = db.get('kibra_vendor')
     records['mn'] = db.get('kibra_model')
-    records['sq'] = struct.pack('!I', db.get('bbr_seq')).hex()
+    records['sq'] = struct.pack('!B', db.get('bbr_seq')).hex()
     records['bb'] = struct.pack('!H', db.get('bbr_port')).hex()
 
     return records
