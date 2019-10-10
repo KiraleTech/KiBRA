@@ -202,52 +202,102 @@ def _rt_add_table(name, number):
         file_.write('\n%s\t%s\n' % (number, name))
 
 
-def assign_addr(addr):
+def _get_addr_type(addr):
+    # TODO: parse non ncp_prefix based addresses as well, but KiNOS could pass
+    # addresses before it passes the prefix
+
+    addr_bytes = ipaddress.IPv6Address(addr).packed
+
+    if addr_bytes[0] == 0xFE and addr_bytes[1] == 0x80:
+        return 'ncp_ll'
+    elif addr_bytes[-5] == 0xFF and addr_bytes[-4] == 0xFE and addr_bytes[-3] == 0x00:
+        if addr_bytes[-2] == 0xFC:
+            if addr_bytes[-1] >= 0x01 and addr_bytes[-1] <= 0x0F:
+                return 'dhcp_aloc'
+            elif addr_bytes[-1] == 0x10:
+                return 'bbr_service_aloc'
+            elif addr_bytes[-1] == 0x38:
+                return 'bbr_primary_aloc'
+        else:
+            return 'ncp_rloc'
+    else:
+        return 'ncp_mleid'
+
+
+def handle_addr(addr, action='add'):
     '''Assign an address to the interior interface'''
 
+    # No actions for unhandled types
+    type_ = _get_addr_type(addr)
+    if type_ is None:
+        return
+
+    # addr_name: desc
+    addr_descs = {
+        'ncp_rloc': 'NCP RLOC',
+        'ncp_mleid': 'NCP ML-EID',
+        'ncp_ll': 'NCP link-local',
+        'dhcp_aloc': 'DHCPv6 Agent ALOC',
+        'bbr_service_aloc': 'BBR Service ALOC',
+        'bbr_primary_aloc': 'Primary BBR ALOC',
+    }
+
     idx = db.get('interior_ifnumber')
+    old_ncp_rloc = db.get('ncp_rloc')
 
     # Add interior interface IPv6 address
-    if addr.startswith('fe80'):
-        logging.info('Link-local address is %s', addr)
-        db.set('ncp_ll', addr)
-    else:
+    if 'add' in action:
         try:
             IPR.addr('add', index=idx, address=addr, prefixlen=64)
+            # Add dongle neighbour
+            IPR.neigh(
+                'replace',
+                family=socket.AF_INET6,
+                dst=addr,
+                lladdr=db.get('ncp_mac'),
+                ifindex=idx,
+                nud='permanent',
+            )
         except:
             pass  # It might already exist
 
-        # RLOC
-        if 'ff:fe' in addr:
-            logging.info('RLOC address is %s', addr)
-            old_ncp_rloc = db.get('ncp_rloc')
-            db.set('ncp_rloc', addr)
+        # Logging and setting
+        logging.info('%s address is %s', addr_descs.get(type_), addr)
+        db.set(type_, addr)
 
+        # Specific add actions
+        if type_ == 'ncp_rloc':
+            # Changes in RLOC affect servers
             if old_ncp_rloc and addr != old_ncp_rloc:
-                # Changes in RLOC affect servers
                 IPR.addr('del', index=idx, address=old_ncp_rloc, prefixlen=64)
-                COAPSERVER.OLD_NCP_RLOC = old_ncp_rloc
+                # Restart DHCP server
                 DHCP.dhcp_server_stop()
                 DHCP.dhcp_server_start()
-                IPTABLES.handle_diag('D', old_ncp_rloc)
-                IPTABLES.handle_diag('I', addr)
-                for ext_addr in db.get('exterior_addrs'):
-                    IPTABLES.handle_bagent_fwd(ext_addr, old_ncp_rloc, enable=False)
-                    IPTABLES.handle_bagent_fwd(ext_addr, addr, enable=True)
-        # ML-EID
-        else:
-            logging.info('ML-EID address is %s', addr)
-            db.set('ncp_mleid', addr)
+                if old_ncp_rloc:
+                    # Reconfigure Iptables for Diagnostics
+                    IPTABLES.handle_diag('D', old_ncp_rloc)
+                    IPTABLES.handle_diag('I', addr)
+                    # Reconfigure Iptables for Border Agent
+                    for ext_addr in db.get('exterior_addrs'):
+                        IPTABLES.handle_bagent_fwd(ext_addr, old_ncp_rloc, enable=False)
+                        IPTABLES.handle_bagent_fwd(ext_addr, addr, enable=True)
+        elif type_ == 'dhcp_aloc':
+            # Restart DHCP server
+            DHCP.dhcp_server_stop()
+            DHCP.dhcp_server_start()
+        elif type_ == 'bbr_primary_aloc':
+            if 'primary' not in db.get('bbr_status'):
+                db.set('bbr_status', 'primary')
+                logging.info('This BBR is now Primary.')
 
-    # Add NCP neighbour
-    IPR.neigh(
-        'replace',
-        family=socket.AF_INET6,
-        dst=addr,
-        lladdr=db.get('ncp_mac'),
-        ifindex=idx,
-        nud='permanent',
-    )
+    # We don't remove the addresses from the system since there could be
+    # services already running on them
+    if 'del' in action:
+        # Specific del actions
+        if type_ == 'bbr_primary_aloc':
+            if 'secondary' not in db.get('bbr_status'):
+                db.set('bbr_status', 'secondary')
+                logging.info('This BBR is now Secondary.')
 
 
 def _ifup():

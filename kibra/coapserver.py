@@ -29,8 +29,6 @@ IP = IPRoute()
 DUA_HNDLR = None
 MCAST_HNDLR = None
 
-OLD_NCP_RLOC = None
-
 COAP_NO_RESPONSE = None
 
 INFINITE_TIMESTAMP = 0
@@ -890,9 +888,58 @@ class COAPSERVER(Ktask):
             period=1,
         )
 
+        # Initialize resources
+        REG_RES = [(URI.tuple(URI.N_MR), Res_N_MR()), (URI.tuple(URI.N_DR), Res_N_DR())]
+        RLOC_RES = REG_RES + [(URI.tuple(URI.A_AE), Res_A_AE())]
+
+        # addr_name: [iface, port, resources]
+        self.required_coap_servers = {
+            'ncp_rloc': ['interior_ifnumber', DEFS.PORT_MM, RLOC_RES],
+            'interior_ipv6_ll': ['interior_ifnumber', DEFS.PORT_MM, RLOC_RES],
+            'bbr_primary_aloc': ['interior_ifnumber', DEFS.PORT_MM, REG_RES],
+            'bbr_service_aloc': ['interior_ifnumber', DEFS.PORT_MM, REG_RES],
+            'all_network_bbrs': [
+                'exterior_ifnumber',
+                db.get('bbr_port'),
+                [(URI.tuple(URI.B_BMR), Res_B_BMR())],
+            ],
+            'realm_local_all_routers': [
+                'interior_ifnumber',
+                DEFS.PORT_MM,
+                [(URI.tuple(URI.A_AQ), Res_A_AQ()), (URI.tuple(URI.A_AE), Res_A_AE())],
+            ],
+            'all_domain_bbrs': [
+                'exterior_ifnumber',
+                db.get('bbr_port'),
+                [
+                    (URI.tuple(URI.B_BQ), Res_B_BQ()),
+                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
+                ],
+            ],
+            'exterior_ipv6_ll': [
+                'interior_ifnumber',
+                db.get('bbr_port'),
+                [(URI.tuple(URI.B_BA), Res_B_BA_uni())],
+            ],
+        }
+
+        # addr_name: [iface, description]
+        self.mcast_groups = {
+            'realm_local_all_routers': ['interior_ifnumber', 'Realm-Local All-Routers'],
+            'all_network_bbrs': ['exterior_ifnumber', 'All Network BBRs'],
+            'all_domain_bbrs': ['exterior_ifnumber', ' All Domain BBRs'],
+        }
+
+        # Restore possible set values
+        db.set('bbr_primary_aloc', None)
+        db.set('bbr_service_aloc', None)
+
     def kstart(self):
         global DUA_HNDLR
         global MCAST_HNDLR
+
+        self.last_ncp_rloc = None
+        self.last_bbr_status = 'off'
 
         logging.info('Starting DUA handler')
         DUA_HNDLR = DUAHandler()
@@ -900,119 +947,37 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR = MulticastHandler()
 
         # Set All Network BBRs multicast address as per 9.4.8.1
-        all_network_bbrs = THREAD.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
-        db.set('all_network_bbrs', all_network_bbrs)
-        logging.info('Joining All Network BBRs group: %s' % all_network_bbrs)
-        MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
-        # TODO: update it if ncp_prefix changes
+        db.set(
+            'all_network_bbrs', THREAD.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
+        )
 
         # Set All Domain BBRs multicast address as per 9.4.8.1
-        all_domain_bbrs = THREAD.get_prefix_based_mcast(db.get('prefix'), 3)
-        db.set('all_domain_bbrs', all_domain_bbrs)
-        logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
-        MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
-        # TODO: enable radvd
+        db.set('all_domain_bbrs', THREAD.get_prefix_based_mcast(db.get('prefix'), 3))
 
-        # Listen for CoAP in Realm-Local All-Routers multicast address
-        logging.info('Joining Realm-Local All-Routers group: ff03::2')
-        MCAST_HNDLR.mcrouter.join_leave_group(
-            'join', 'ff03::2', db.get('interior_ifnumber')
-        )
-
-        # Launch CoAP servers
-        self.coap_servers = []
-
-        resources = [
-            (URI.tuple(URI.N_MR), Res_N_MR()),
-            (URI.tuple(URI.N_DR), Res_N_DR()),
-            (URI.tuple(URI.A_AE), Res_A_AE()),
-        ]
-
-        # Bind to RLOC
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('ncp_rloc'),
-                port=DEFS.PORT_MM,
-                resources=resources,
-                iface=db.get('interior_ifnumber'),
+        # Listen for CoAP in required multicast addresses
+        for group, params in self.mcast_groups.items():
+            logging.info('Joining %s group: %s' % (params[1], db.get(group)))
+            MCAST_HNDLR.mcrouter.join_leave_group(
+                'join', db.get(group), db.get(params[0])
             )
-        )
 
-        # Bind to LL
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('interior_ipv6_ll'),
-                port=DEFS.PORT_MM,
-                resources=resources,
-                iface=db.get('interior_ifnumber'),
-            )
-        )
-
-        # Bind Res_B_BMR to all_network_bbrs
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('all_network_bbrs'),
-                port=db.get('bbr_port'),
-                resources=[(URI.tuple(URI.B_BMR), Res_B_BMR())],
-                iface=db.get('exterior_ifnumber'),
-            )
-        )
-
-        # Bind to Realm-Local All-Routers
-        self.coap_servers.append(
-            CoapServer(
-                addr='ff03::2',
-                port=DEFS.PORT_MM,
-                resources=[
-                    (URI.tuple(URI.A_AQ), Res_A_AQ()),
-                    (URI.tuple(URI.A_AE), Res_A_AE()),
-                ],
-                iface=db.get('interior_ifnumber'),
-            )
-        )
-
-        # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('all_domain_bbrs'),
-                port=db.get('bbr_port'),
-                resources=[
-                    (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
-                ],
-                iface=db.get('exterior_ifnumber'),
-            )
-        )
-
-        # Bind Res_B_BA to exterior link-local
-        self.coap_servers.append(
-            CoapServer(
-                addr=db.get('exterior_ipv6_ll'),
-                port=db.get('bbr_port'),
-                resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
-                iface=db.get('exterior_ifnumber'),
-            )
-        )
+        # CoAP servers
+        self.running_coap_servers = []
+        self._launch_servers()
 
     def kstop(self):
         logging.info('Stopping CoAP servers')
-        for coap_server in self.coap_servers:
+        for coap_server in self.running_coap_servers:
             coap_server.stop()
 
-        all_network_bbrs = db.get('all_network_bbrs')
-        logging.info('Leaving All Network BBRs group: %s' % all_network_bbrs)
-        MCAST_HNDLR.mcrouter.join_leave_group('leave', all_network_bbrs)
-
         db.set('bbr_status', 'off')
-        
-        all_domain_bbrs = db.get('all_domain_bbrs')
-        logging.info('Leaving All Domain BBRs group: %s' % all_domain_bbrs)
-        MCAST_HNDLR.mcrouter.join_leave_group('leave', all_domain_bbrs)
 
-        logging.info('Leaving Realm-Local All-Routers group: ff03::2')
-        MCAST_HNDLR.mcrouter.join_leave_group(
-            'leave', 'ff03::2', db.get('interior_ifnumber')
-        )
+        # Un-listen for CoAP in required multicast addresses
+        for group, params in self.mcast_groups.items():
+            logging.info('Leaving %s group: %s' % (params[1], db.get(group)))
+            MCAST_HNDLR.mcrouter.join_leave_group(
+                'leave', db.get(group), db.get(params[0])
+            )
 
         logging.info('Stopping Multicast handler')
         MCAST_HNDLR.stop()
@@ -1020,19 +985,43 @@ class COAPSERVER(Ktask):
         DUA_HNDLR.stop()
 
     async def periodic(self):
-        global OLD_NCP_RLOC
 
         MCAST_HNDLR.reg_periodic()
 
-        if OLD_NCP_RLOC:
-            self.ncp_rloc_changed(OLD_NCP_RLOC)
-            OLD_NCP_RLOC = None
+        # Keept track of RLOC changes
+        current_ncp_rloc = db.get('ncp_rloc')
+        if current_ncp_rloc != self.last_ncp_rloc:
+            self._ncp_rloc_changed(self.last_ncp_rloc)
+            self.last_ncp_rloc = current_ncp_rloc
 
-    def ncp_rloc_changed(self, old_ncp_rloc):
-        if not old_ncp_rloc:
-            return
+        # Keep track of BBR status changes
+        current_bbr_status = db.get('bbr_status')
+        if current_bbr_status != self.last_bbr_status:
+            if current_bbr_status == 'primary':
+                self._launch_servers()
+            self.last_bbr_status = current_bbr_status
 
-        for coap_server in self.coap_servers:
+    def _launch_servers(self):
+        # Find running servers
+        running_addrs = []
+        for coap_server in self.running_coap_servers:
+            running_addrs.append(coap_server.addr)
+
+        # Add missing servers
+        for addr_name, params in self.required_coap_servers.items():
+            addr = db.get(addr_name)
+            if addr and addr not in running_addrs:
+                self.running_coap_servers.append(
+                    CoapServer(
+                        addr=addr,
+                        port=params[1],
+                        resources=params[2],
+                        iface=db.get(params[0]),
+                    )
+                )
+
+    def _ncp_rloc_changed(self, old_ncp_rloc):
+        for coap_server in self.running_coap_servers:
             if coap_server.addr == old_ncp_rloc:
                 logging.info('A change in NCP RLOC triggered a CoAP server reload.')
                 coap_server.context.shutdown()

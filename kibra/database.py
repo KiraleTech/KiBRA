@@ -43,10 +43,13 @@ DB_ITEMS = {
     'autostart': [int, 0, lambda x: x in (0, 1), True, False],
     'bagent_port': [int, DEFS.PORT_MC, lambda x: True, False, False],
     'bbr_port': [int, DEFS.PORT_BB, lambda x: x >= 0 and x < 0xFFFF, False, False],
+    'bbr_primary_aloc': [str, None, lambda x: True, False, False],
     'bbr_seq': [int, DEFS.BBR_SEQ, lambda x: x >= 0 and x < 0xFF, False, True],
+    'bbr_service_aloc': [str, None, lambda x: True, False, False],
     'bbr_status': [str, None, lambda x: True, False, False],
     'bridging_mark': [int, None, lambda x: True, False, False],
     'bridging_table': [str, None, lambda x: True, False, False],
+    'dhcp_aloc': [str, None, lambda x: True, False, False],
     'dua_next_status': [str, '', lambda x: True, False, False],  # Thread Harness
     'dua_next_status_eid': [str, '', lambda x: True, False, False],  # Thread Harness
     'exterior_ifname': [str, None, lambda x: True, False, False],
@@ -105,6 +108,7 @@ DB_ITEMS = {
     'prefix_dhcp': [int, 0, lambda x: True, True, True],
     'prefix_dua': [int, 0, lambda x: True, True, True],
     'prefix_slaac': [int, 1, lambda x: True, True, True],
+    'realm_local_all_routers': [str, 'ff03::2', lambda x: True, False, False],
     'rereg_delay': [
         int,
         DEFS.BBR_DEF_REREG_DELAY,

@@ -16,10 +16,10 @@ SYSLOG_PORT = 514
 # KiNOS messages
 SYSLOG_MSG_ID_CACHE_DEL = 0
 SYSLOG_MSG_ID_CACHE_ADD = 1
-SYSLOG_MSG_ID_BBR_PRI = 2
-SYSLOG_MSG_ID_BBR_SEC = 3
-SYSLOG_MSG_ID_ALOC_DEL = 4  # Not used
-SYSLOG_MSG_ID_ALOC_ADD = 5  # Not used
+SYSLOG_MSG_ID_BBR_PRI = 2  # Not used
+SYSLOG_MSG_ID_BBR_SEC = 3  # Not used
+SYSLOG_MSG_ID_ALOC_DEL = 4
+SYSLOG_MSG_ID_ALOC_ADD = 5
 SYSLOG_MSG_ID_UNICAST_SYS_ADD = 6
 SYSLOG_MSG_ID_AOPD_SAVED = 7
 SYSLOG_MSG_ID_JOIN_STATUS_OK = 8
@@ -51,23 +51,19 @@ def _process_message(msgid, uptime, payload):
             cached_eids.remove(payload)
             db.set('ncp_eid_cache', cached_eids)
         except:
-            pass # It didn't exist in the list
+            pass  # It didn't exist in the list
         logging.info('Address %s is not cached anymore.' % payload)
     elif msgid == SYSLOG_MSG_ID_CACHE_ADD:
         cached_eids = db.get('ncp_eid_cache')
         cached_eids.append(payload)
         db.set('ncp_eid_cache', cached_eids)
         logging.info('Address %s is now cached.' % payload)
-    elif msgid == SYSLOG_MSG_ID_BBR_PRI:
-        if 'primary' not in db.get('bbr_status'):
-            db.set('bbr_status', 'primary')
-            logging.info('This BBR is now Primary.')
-    elif msgid == SYSLOG_MSG_ID_BBR_SEC:
-        if 'secondary' not in db.get('bbr_status'):
-            db.set('bbr_status', 'secondary')
-            logging.info('This BBR is now Secondary.')
+    elif msgid == SYSLOG_MSG_ID_ALOC_DEL:
+        NETWORK.handle_addr(payload, 'del')
+    elif msgid == SYSLOG_MSG_ID_ALOC_ADD:
+        NETWORK.handle_addr(payload, 'add')
     elif msgid == SYSLOG_MSG_ID_UNICAST_SYS_ADD:
-        NETWORK.assign_addr(payload)
+        NETWORK.handle_addr(payload, 'add')
     elif msgid == SYSLOG_MSG_ID_AOPD_SAVED:
         _parse_active_dataset(payload)
         logging.info('Active dataset changed.')
