@@ -163,7 +163,7 @@ class MulticastHandler:
         else:
             how_long = '(+%d s)' % addr_tout
         logging.info('Multicast address %s registration updated %s' % (addr, how_long))
-    
+
     def addr_remove(self, addr):
 
         # Remove the address from the volatile list
@@ -182,7 +182,7 @@ class MulticastHandler:
         self.mcrouter.join_leave_group('leave', addr)
 
         logging.info('Multicast address %s registration removed.' % addr)
-    
+
     def maddr_perm_load(self):
         maddrs_perm = db.get('maddrs_perm')
         for addr in maddrs_perm:
@@ -883,7 +883,7 @@ class COAPSERVER(Ktask):
         Ktask.__init__(
             self,
             name='coapserver',
-            start_keys=['ncp_rloc', 'ncp_prefix'],
+            start_keys=['prefix_dua', 'ncp_rloc', 'ncp_prefix'],
             stop_keys=['all_network_bbrs'],
             start_tasks=['serial', 'network', 'syslog'],
             stop_tasks=[],
@@ -906,29 +906,27 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR.mcrouter.join_leave_group('join', all_network_bbrs)
         # TODO: update it if ncp_prefix changes
 
-        if db.get('prefix_dua'):
-            # Set All Domain BBRs multicast address as per 9.4.8.1
-            all_domain_bbrs = THREAD.get_prefix_based_mcast(db.get('prefix'), 3)
-            db.set('all_domain_bbrs', all_domain_bbrs)
-            logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
-            MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
-            # TODO: enable radvd
+        # Set All Domain BBRs multicast address as per 9.4.8.1
+        all_domain_bbrs = THREAD.get_prefix_based_mcast(db.get('prefix'), 3)
+        db.set('all_domain_bbrs', all_domain_bbrs)
+        logging.info('Joining All Domain BBRs group: %s' % all_domain_bbrs)
+        MCAST_HNDLR.mcrouter.join_leave_group('join', all_domain_bbrs)
+        # TODO: enable radvd
 
-            # Listen for CoAP in Realm-Local All-Routers multicast address
-            logging.info('Joining Realm-Local All-Routers group: ff03::2')
-            MCAST_HNDLR.mcrouter.join_leave_group(
-                'join', 'ff03::2', db.get('interior_ifnumber')
-            )
+        # Listen for CoAP in Realm-Local All-Routers multicast address
+        logging.info('Joining Realm-Local All-Routers group: ff03::2')
+        MCAST_HNDLR.mcrouter.join_leave_group(
+            'join', 'ff03::2', db.get('interior_ifnumber')
+        )
 
         # Launch CoAP servers
         self.coap_servers = []
 
-        resources = [(URI.tuple(URI.N_MR), Res_N_MR())]
-        if db.get('prefix_dua'):
-            resources += [
-                (URI.tuple(URI.N_DR), Res_N_DR()),
-                (URI.tuple(URI.A_AE), Res_A_AE()),
-            ]
+        resources = [
+            (URI.tuple(URI.N_MR), Res_N_MR()),
+            (URI.tuple(URI.N_DR), Res_N_DR()),
+            (URI.tuple(URI.A_AE), Res_A_AE()),
+        ]
 
         # Bind to RLOC
         self.coap_servers.append(
@@ -960,42 +958,41 @@ class COAPSERVER(Ktask):
             )
         )
 
-        if db.get('prefix_dua'):
-            # Bind to Realm-Local All-Routers
-            self.coap_servers.append(
-                CoapServer(
-                    addr='ff03::2',
-                    port=DEFS.PORT_MM,
-                    resources=[
-                        (URI.tuple(URI.A_AQ), Res_A_AQ()),
-                        (URI.tuple(URI.A_AE), Res_A_AE()),
-                    ],
-                    iface=db.get('interior_ifnumber'),
-                )
+        # Bind to Realm-Local All-Routers
+        self.coap_servers.append(
+            CoapServer(
+                addr='ff03::2',
+                port=DEFS.PORT_MM,
+                resources=[
+                    (URI.tuple(URI.A_AQ), Res_A_AQ()),
+                    (URI.tuple(URI.A_AE), Res_A_AE()),
+                ],
+                iface=db.get('interior_ifnumber'),
             )
+        )
 
-            # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
-            self.coap_servers.append(
-                CoapServer(
-                    addr=db.get('all_domain_bbrs'),
-                    port=db.get('bbr_port'),
-                    resources=[
-                        (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                        (URI.tuple(URI.B_BA), Res_B_BA_multi()),
-                    ],
-                    iface=db.get('exterior_ifnumber'),
-                )
+        # Bind Res_B_BQ and Res_B_BA_multi to all_domain_bbrs
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('all_domain_bbrs'),
+                port=db.get('bbr_port'),
+                resources=[
+                    (URI.tuple(URI.B_BQ), Res_B_BQ()),
+                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
+                ],
+                iface=db.get('exterior_ifnumber'),
             )
+        )
 
-            # Bind Res_B_BA to exterior link-local
-            self.coap_servers.append(
-                CoapServer(
-                    addr=db.get('exterior_ipv6_ll'),
-                    port=db.get('bbr_port'),
-                    resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
-                    iface=db.get('exterior_ifnumber'),
-                )
+        # Bind Res_B_BA to exterior link-local
+        self.coap_servers.append(
+            CoapServer(
+                addr=db.get('exterior_ipv6_ll'),
+                port=db.get('bbr_port'),
+                resources=[(URI.tuple(URI.B_BA), Res_B_BA_uni())],
+                iface=db.get('exterior_ifnumber'),
             )
+        )
 
     def kstop(self):
         logging.info('Stopping CoAP servers')
@@ -1007,15 +1004,15 @@ class COAPSERVER(Ktask):
         MCAST_HNDLR.mcrouter.join_leave_group('leave', all_network_bbrs)
 
         db.set('bbr_status', 'off')
-        if db.get('prefix_dua'):
-            all_domain_bbrs = db.get('all_domain_bbrs')
-            logging.info('Leaving All Domain BBRs group: %s' % all_domain_bbrs)
-            MCAST_HNDLR.mcrouter.join_leave_group('leave', all_domain_bbrs)
+        
+        all_domain_bbrs = db.get('all_domain_bbrs')
+        logging.info('Leaving All Domain BBRs group: %s' % all_domain_bbrs)
+        MCAST_HNDLR.mcrouter.join_leave_group('leave', all_domain_bbrs)
 
-            logging.info('Leaving Realm-Local All-Routers group: ff03::2')
-            MCAST_HNDLR.mcrouter.join_leave_group(
-                'leave', 'ff03::2', db.get('interior_ifnumber')
-            )
+        logging.info('Leaving Realm-Local All-Routers group: ff03::2')
+        MCAST_HNDLR.mcrouter.join_leave_group(
+            'leave', 'ff03::2', db.get('interior_ifnumber')
+        )
 
         logging.info('Stopping Multicast handler')
         MCAST_HNDLR.stop()

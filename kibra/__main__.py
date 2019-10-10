@@ -102,7 +102,8 @@ def main():
     TASKS.append(mdns)
     TASKS.append(DIAGS())
     # TODO: don't launch if not connected to backbone link
-    TASKS.append(COAPSERVER())
+    if db.get('prefix_dua'):
+        TASKS.append(COAPSERVER())
 
     # Launch mDNS already
     asyncio.ensure_future(mdns.run())
