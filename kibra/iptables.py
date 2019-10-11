@@ -24,6 +24,7 @@ def handle_ipv6(action):
         return
 
     interior_ifname = db.get('interior_ifname')
+    prefix = db.get('prefix')
 
     # INPUT
     # Disallow incoming multicast ping requests
@@ -85,7 +86,7 @@ def handle_ipv6(action):
     if not db.get('prefix_dua'):
         bash(
             'ip6tables -w -t filter -%s OUTPUT -o %s -p ipv6 -d %s -j DROP'
-            % (action, db.get('exterior_ifname'), db.get('prefix'))
+            % (action, db.get('exterior_ifname'), prefix)
         )
 
     # FORWARD
@@ -99,15 +100,6 @@ def handle_ipv6(action):
         'ip6tables -w -t filter -%s FORWARD -m mark --mark "%s" -j ACCEPT'
         % (action, db.get('bridging_mark'))
     )
-    # Forward ping
-    bash(
-        'ip6tables -w -t filter -%s FORWARD -p icmpv6 --icmpv6-type echo-request -d %s -j ACCEPT'
-        % (action, db.get('prefix'))
-    )
-    bash(
-        'ip6tables -w -t filter -%s FORWARD -p icmpv6 --icmpv6-type echo-reply -s %s -j ACCEPT'
-        % (action, db.get('prefix'))
-    )
     # Reflective session state (9.2.7_13)
     bash(
         'ip6tables -w -t filter -%s FORWARD -p udp -m state --state ESTABLISHED -j ACCEPT'
@@ -117,14 +109,13 @@ def handle_ipv6(action):
         'ip6tables -w -t filter -%s FORWARD -p icmpv6 -m state --state ESTABLISHED,RELATED -j ACCEPT'
         % (action)
     )
-    '''
-    # Forward multicast (filtering is made by mcrouter)
-    bash('ip6tables -w -t mangle -%s PREROUTING -d ff00::/8 -j HL --hl-inc 1' % (action))
-    '''
-    # Block all other forwarding to the Thread interface
-    bash(
-        'ip6tables -w -t filter -%s FORWARD -d %s -j DROP' % (action, db.get('prefix'))
-    )
+    # Forward all multicast (filtering is made by mcrouter)
+    bash('ip6tables -w -t filter -%s FORWARD -d ff00::/8 -j ACCEPT' % (action))
+    # Forward announced prefix
+    bash('ip6tables -w -t filter -%s FORWARD -d %s -j ACCEPT' % (action, prefix))
+    bash('ip6tables -w -t filter -%s FORWARD -s %s -j ACCEPT' % (action, prefix))
+    # Block all other forwarding
+    bash('ip6tables -w -t filter -%s FORWARD -j DROP' % action)
 
 
 def _handle_ipv4(action):
