@@ -42,6 +42,7 @@ DB_ITEMS = {
     'all_network_bbrs': [str, None, lambda x: True, True, False],
     'autostart': [int, 0, lambda x: x in (0, 1), True, False],
     'bagent_port': [int, DEFS.PORT_MC, lambda x: True, False, False],
+    'bbr_enable': [int, 1, lambda x: x in (0, 1), True, True],
     'bbr_port': [int, DEFS.PORT_BB, lambda x: x >= 0 and x < 0xFFFF, False, False],
     'bbr_primary_aloc': [str, None, lambda x: True, False, False],
     'bbr_seq': [int, DEFS.BBR_SEQ, lambda x: x >= 0 and x < 0xFF, False, True],
@@ -72,8 +73,8 @@ DB_ITEMS = {
         False,
     ],
     'maddrs_perm': [list, '[]', lambda x: True, True, True],
-    'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, False],
-    'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, False],
+    'mcast_admin_fwd': [int, 1, lambda x: x in (0, 1), True, True],
+    'mcast_out_fwd': [int, 1, lambda x: x in (0, 1), True, True],
     'mlr_cache': [dict, '{}', lambda x: True, False, False],
     'mlr_next_status': [str, '', lambda x: True, False, False],  # Thread Harness
     'mlr_timeout': [

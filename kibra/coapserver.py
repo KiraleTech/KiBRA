@@ -877,6 +877,12 @@ class Res_A_AE(resource.Resource):
 
 
 class COAPSERVER(Ktask):
+    '''
+    To be launched only if bbr_enable is set.
+    When enabled, Multicast functions are always available.
+    DUA functions are activated when prefix_dua is set.
+    '''
+
     def __init__(self):
         Ktask.__init__(
             self,
@@ -889,46 +895,48 @@ class COAPSERVER(Ktask):
         )
 
         # Initialize resources
-        REG_RES = [(URI.tuple(URI.N_MR), Res_N_MR()), (URI.tuple(URI.N_DR), Res_N_DR())]
-        RLOC_RES = REG_RES + [(URI.tuple(URI.A_AE), Res_A_AE())]
+        N_MR = []
+        B_BMR = []
+        N_DR = []
+        A_AQ = []
+        A_AE = []
+        B_BQ = []
+        B_BAu = []
+        B_BAm = []
+        N_MR = [(URI.tuple(URI.N_MR), Res_N_MR())]
+        B_BMR = [(URI.tuple(URI.B_BMR), Res_B_BMR())]
+        if db.get('prefix_dua'):
+            N_DR = [(URI.tuple(URI.N_DR), Res_N_DR())]
+            A_AQ = [(URI.tuple(URI.A_AQ), Res_A_AQ())]
+            A_AE = [(URI.tuple(URI.A_AE), Res_A_AE())]
+            B_BQ = [(URI.tuple(URI.B_BQ), Res_B_BQ())]
+            B_BAu = [(URI.tuple(URI.B_BA), Res_B_BA_uni())]
+            B_BAm = [(URI.tuple(URI.B_BA), Res_B_BA_multi())]
+        bbr_port = db.get('bbr_port')
 
         # addr_name: [iface, port, resources]
         self.required_coap_servers = {
-            'ncp_rloc': ['interior_ifnumber', DEFS.PORT_MM, RLOC_RES],
-            'interior_ipv6_ll': ['interior_ifnumber', DEFS.PORT_MM, RLOC_RES],
-            'bbr_primary_aloc': ['interior_ifnumber', DEFS.PORT_MM, REG_RES],
-            'bbr_service_aloc': ['interior_ifnumber', DEFS.PORT_MM, REG_RES],
-            'all_network_bbrs': [
-                'exterior_ifnumber',
-                db.get('bbr_port'),
-                [(URI.tuple(URI.B_BMR), Res_B_BMR())],
-            ],
-            'realm_local_all_routers': [
-                'interior_ifnumber',
-                DEFS.PORT_MM,
-                [(URI.tuple(URI.A_AQ), Res_A_AQ()), (URI.tuple(URI.A_AE), Res_A_AE())],
-            ],
-            'all_domain_bbrs': [
-                'exterior_ifnumber',
-                db.get('bbr_port'),
-                [
-                    (URI.tuple(URI.B_BQ), Res_B_BQ()),
-                    (URI.tuple(URI.B_BA), Res_B_BA_multi()),
-                ],
-            ],
-            'exterior_ipv6_ll': [
-                'interior_ifnumber',
-                db.get('bbr_port'),
-                [(URI.tuple(URI.B_BA), Res_B_BA_uni())],
-            ],
+            'ncp_rloc': ['interior_ifnumber', DEFS.PORT_MM, N_MR + N_DR + A_AE],
+            'interior_ipv6_ll': ['interior_ifnumber', DEFS.PORT_MM, N_MR + N_DR + A_AE],
+            'bbr_primary_aloc': ['interior_ifnumber', DEFS.PORT_MM, N_MR + N_DR],
+            'bbr_service_aloc': ['interior_ifnumber', DEFS.PORT_MM, N_MR + N_DR],
+            'all_network_bbrs': ['exterior_ifnumber', bbr_port, B_BMR],
+            'realm_local_all_routers': ['interior_ifnumber', DEFS.PORT_MM, A_AQ + A_AE],
+            'all_domain_bbrs': ['exterior_ifnumber', bbr_port, B_BQ + B_BAm],
+            'exterior_ipv6_ll': ['interior_ifnumber', bbr_port, B_BAu],
         }
 
         # addr_name: [iface, description]
         self.mcast_groups = {
             'realm_local_all_routers': ['interior_ifnumber', 'Realm-Local All-Routers'],
             'all_network_bbrs': ['exterior_ifnumber', 'All Network BBRs'],
-            'all_domain_bbrs': ['exterior_ifnumber', ' All Domain BBRs'],
         }
+
+        if db.get('prefix_dua'):
+            self.mcast_groups['all_domain_bbrs'] = [
+                'exterior_ifnumber',
+                ' All Domain BBRs',
+            ]
 
         # Restore possible set values
         db.set('bbr_primary_aloc', None)
@@ -951,8 +959,11 @@ class COAPSERVER(Ktask):
             'all_network_bbrs', THREAD.get_prefix_based_mcast(db.get('ncp_prefix'), 3)
         )
 
-        # Set All Domain BBRs multicast address as per 9.4.8.1
-        db.set('all_domain_bbrs', THREAD.get_prefix_based_mcast(db.get('prefix'), 3))
+        if db.get('prefix_dua'):
+            # Set All Domain BBRs multicast address as per 9.4.8.1
+            db.set(
+                'all_domain_bbrs', THREAD.get_prefix_based_mcast(db.get('prefix'), 3)
+            )
 
         # Listen for CoAP in required multicast addresses
         for group, params in self.mcast_groups.items():
@@ -1010,7 +1021,8 @@ class COAPSERVER(Ktask):
         # Add missing servers
         for addr_name, params in self.required_coap_servers.items():
             addr = db.get(addr_name)
-            if addr and addr not in running_addrs:
+            # Don't add if already running or if not resources configured
+            if addr and addr not in running_addrs and params[2]:
                 self.running_coap_servers.append(
                     CoapServer(
                         addr=addr,

@@ -88,17 +88,16 @@ class DIAGS(Ktask):
             self.last_time = current_time
             self._parse_diags(response)
             # Update nodes info
-            if not kibra.__harness__:
-                for rloc16 in self.nodes_list:
-                    if rloc16 == self.br_rloc16:
-                        continue
-                    node_rloc = THREAD.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
-                    response = await self.petitioner.con_request(
-                        node_rloc, THREAD.DEFS.PORT_MM, THREAD.URI.D_DG, PET_DIAGS
-                    )
-                    self._parse_diags(response)
-                    time.sleep(0.2)
-                self._mark_old_nodes()
+            for rloc16 in self.nodes_list:
+                if rloc16 == self.br_rloc16:
+                    continue
+                node_rloc = THREAD.get_rloc_from_short(db.get('ncp_prefix'), rloc16)
+                response = await self.petitioner.con_request(
+                    node_rloc, THREAD.DEFS.PORT_MM, THREAD.URI.D_DG, PET_DIAGS
+                )
+                self._parse_diags(response)
+                time.sleep(0.2)
+            self._mark_old_nodes()
 
     def _parse_diags(self, tlvs):
         now = _epoch_ms()

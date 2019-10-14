@@ -101,8 +101,7 @@ def main():
     TASKS.append(DNS())
     TASKS.append(mdns)
     TASKS.append(DIAGS())
-    # TODO: don't launch if not connected to backbone link
-    if db.get('prefix_dua'):
+    if db.get('bbr_enable'):
         TASKS.append(COAPSERVER())
 
     # Launch mDNS already
