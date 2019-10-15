@@ -125,11 +125,10 @@ class MulticastHandler:
         self.maddr_perm_load()
 
     def stop(self):
+        self.mcrouter.stop()
+
         if self.coap_client is not None:
             self.coap_client.stop()
-            self.coap_client = None
-
-        self.mcrouter.stop()
 
     def reg_update(self, addrs, addr_tout):
         for addr in addrs:
@@ -347,7 +346,6 @@ class DUAHandler:
         self.ndproxy.stop()
         if self.coap_client is not None:
             self.coap_client.stop()
-            self.coap_client = None
 
     def reg_update(self, src_rloc, eid, dua, elapsed):
         old_entry = None
@@ -923,7 +921,7 @@ class COAPSERVER(Ktask):
             'all_network_bbrs': ['exterior_ifnumber', bbr_port, B_BMR],
             'realm_local_all_routers': ['interior_ifnumber', DEFS.PORT_MM, A_AQ + A_AE],
             'all_domain_bbrs': ['exterior_ifnumber', bbr_port, B_BQ + B_BAm],
-            'exterior_ipv6_ll': ['interior_ifnumber', bbr_port, B_BAu],
+            'exterior_ipv6_ll': ['exterior_ifnumber', bbr_port, B_BAu],
         }
 
         # addr_name: [iface, description]
@@ -939,8 +937,8 @@ class COAPSERVER(Ktask):
             ]
 
         # Restore possible set values
-        db.set('bbr_primary_aloc', None)
-        db.set('bbr_service_aloc', None)
+        db.set('bbr_primary_aloc', '')
+        db.set('bbr_service_aloc', '')
 
     def kstart(self):
         global DUA_HNDLR
