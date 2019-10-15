@@ -52,11 +52,11 @@ setup(
     include_package_data=True,
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'aiocoap==kirale-1.2',
+        'aiocoap==kirale-1.3',
         'bash==0.6',
         'daemonize==2.5.0',
         'importlib_resources==1.0.2',  # Not needed in Python 3.7
-        'kitools==1.3.4',
+        'kitools==1.3.5',
         'pyroute2==0.5.3',
     ],
     entry_points={'console_scripts': ['kibra = kibra.__main__:main']},
