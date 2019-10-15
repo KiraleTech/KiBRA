@@ -127,6 +127,7 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                 hl = req.get('hl', ['255'])[0]
                 iface = db.get('exterior_ifname')
                 port = req.get('port', [''])[0]
+                tout = req.get('tout', ['0'])[0]
                 if port:
                     # UDP
                     cmd = 'nping -6 --udp'
@@ -143,8 +144,8 @@ class WebServer(http.server.SimpleHTTPRequestHandler):
                     cmd += ' --data-length %s' % size
                 else:
                     # ICMP
-                    cmd = 'ping -6 -c1 -W2'
-                    cmd += ' -s%s -t%s -I%s %s' % (size, hl, iface, dst)
+                    cmd = 'ping -6 -c1'
+                    cmd += ' -W%s -s%s -t%s -I%s %s' % (tout, size, hl, iface, dst)
                 try:
                     data = bash(cmd)
                 except Exception as e:
