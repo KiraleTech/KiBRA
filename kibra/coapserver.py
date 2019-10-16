@@ -892,6 +892,10 @@ class COAPSERVER(Ktask):
             period=1,
         )
 
+    def kstart(self):
+        global DUA_HNDLR
+        global MCAST_HNDLR
+
         # Initialize resources
         N_MR = []
         B_BMR = []
@@ -939,10 +943,6 @@ class COAPSERVER(Ktask):
         # Restore possible set values
         db.set('bbr_primary_aloc', '')
         db.set('bbr_service_aloc', '')
-
-    def kstart(self):
-        global DUA_HNDLR
-        global MCAST_HNDLR
 
         self.last_ncp_rloc = None
         self.last_bbr_status = 'off'
